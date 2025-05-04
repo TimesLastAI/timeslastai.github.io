@@ -1,0 +1,6 @@
+{
+  "name": "TimesLast AI App",
+  "short_name": "TimesLast AI",
+  "display": "fullscreen",
+  "start_url": "index.html"
+}
