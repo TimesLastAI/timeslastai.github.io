@@ -84,12 +84,17 @@
     .settings-panel input[type="text"]:focus { outline: none; border-color: var(--accent); }
     .theme-toggle { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 
-    /* Messages wrapper */
     .messages-wrapper {
-      flex: 1; background: var(--bg); overflow-y: auto; padding: 16px 0;
-      /* ensure messages sit above fixed input */
-      padding-bottom: calc(12px + 40px + env(safe-area-inset-bottom));
+      position: absolute;
+      top: 48px; /* height of header */
+      bottom: 64px; /* height of input + spacing */
+      left: 0;
+      right: 0;
+      overflow-y: auto;
+      background: var(--bg);
+      padding: 16px;
     }
+
     .messages { max-width: 945px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 
     /* Scrollbar */
