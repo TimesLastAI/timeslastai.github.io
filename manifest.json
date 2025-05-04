@@ -1,6 +1,10 @@
 {
-  "name": "TimesLast AI App",
-  "short_name": "TimesLast AI",
-  "display": "fullscreen",
-  "start_url": "index.html"
+  "name": "TimesLastAIApp",
+  "short_name": "TimesLastAI",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#18181b",
+  "theme_color": "#27272a",
+  "description": "A clean, fullscreen AI chat app styled like a native mobile app."
 }
