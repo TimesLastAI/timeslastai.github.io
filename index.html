@@ -452,12 +452,23 @@
        .sidebar-header { height: 50px; }
 
       .messages, .input-container { max-width: 100%; padding: 0 10px; }
-       .input-area { padding: 8px 0; }
-       .input-inner { gap: 8px; }
+      .input-area {
+          padding: 8px 0 14px 0; /* Keep the increased bottom padding */
+      }
+
+       /* --- MODIFICATION START --- */
+       .input-inner {
+           display: flex;
+           /* Change alignment from flex-end to center */
+           align-items: center;
+           gap: 8px; /* Keep existing gap */
+       }
+       /* --- MODIFICATION END --- */
+
        #chatInput { padding: 8px 12px; min-height: 38px; }
        .file-upload-btn-label, #sendBtn { width: 38px; height: 38px; }
-       .file-upload-btn-label .ds-icon svg { width: 18px; height: 18px; } /* Adjust mobile icon size */
-       #sendBtn .ds-icon svg { width: 14px; height: 14px; } /* Adjust mobile icon size */
+       .file-upload-btn-label .ds-icon svg { width: 18px; height: 18px; }
+       #sendBtn .ds-icon svg { width: 14px; height: 14px; }
 
        .message { max-width: 95%; }
        .header { padding: 0 10px; height: 50px; }
