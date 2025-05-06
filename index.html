@@ -881,7 +881,7 @@
     document.addEventListener('click', (e) => { if (window.innerWidth <= 768 && sidebar.classList.contains('open') && !sidebar.contains(e.target) && !sidebarOpenBtn.contains(e.target)) sidebar.classList.remove('open'); });
     newChatBtn.addEventListener('click', () => { if (!isSending) { startNewConversation(); if (window.innerWidth <= 768) sidebar.classList.remove('open'); } });
 
-    // *** MODIFICATION 4: Add focus listener for keyboard handling ***
+    // *** MODIFICATION 4: Add focus listener for keyboard handling (Existing comment in original code) ***
     chatInput.addEventListener('focus', () => {
         const isMobile = window.innerWidth <= 768;
         if (isMobile) {
@@ -893,6 +893,53 @@
             }, 200); // Adjust delay if necessary (100-300ms range)
         }
     });
+
+    // *** NEW MODIFICATION: Handle pasting images into chatInput ***
+    function handlePaste(event) {
+        const items = event.clipboardData?.items;
+        if (!items) return;
+
+        let pastedImageFile = null;
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                pastedImageFile = items[i].getAsFile();
+                break;
+            }
+        }
+
+        if (pastedImageFile) {
+            event.preventDefault(); // Prevent default paste behavior (e.g., pasting as base64 text or an <img> tag)
+
+            // Ensure the file has a name. Browsers might provide a generic one or none.
+            // Create a new File object with a generated name if needed.
+            if (!pastedImageFile.name) {
+                const extension = pastedImageFile.type.split('/')[1] || 'png'; // Default to png
+                const fileName = `pasted_image_${Date.now()}.${extension}`;
+                selectedFile = new File([pastedImageFile], fileName, { type: pastedImageFile.type });
+            } else {
+                selectedFile = pastedImageFile;
+            }
+
+            // Update UI with the pasted file
+            fileNamePreviewEl.textContent = selectedFile.name;
+            fileNamePreviewEl.title = selectedFile.name; // For tooltip on hover
+            const fileTypeDisplay = selectedFile.type.split('/')[1]?.toUpperCase() || 'IMAGE';
+            fileInfoPreviewEl.textContent = `${fileTypeDisplay} ${formatBytes(selectedFile.size)}`;
+            filePreview.style.display = 'block';
+
+            updateSendButtonState();
+            adjustTextareaHeight();
+
+            // Clear the actual file input element if a file was previously selected via the button.
+            // This ensures the pasted image is the one to be sent.
+            fileInput.value = '';
+            console.log("Image pasted and processed:", selectedFile.name, selectedFile.size);
+        }
+        // If no image is found, the default paste behavior (for text, etc.) will proceed.
+    }
+    chatInput.addEventListener('paste', handlePaste);
+    // *** END NEW MODIFICATION ***
+
 
     // Initial Page Load Setup
     updateSendButtonState(); adjustTextareaHeight(); loadConversationsList();
