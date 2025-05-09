@@ -25,6 +25,7 @@
       --text: #e4e4e7;
       --text-muted: #a1a1aa;
       --accent: #8b5cf6; /* Purple accent */
+      --link-visited-color: #a78bfa; /* Light purple for visited links (Tailwind violet-400) - ADDED */
       --input-border: #52525b;
       --input-border-focus: var(--accent);
       --button-disabled-bg: #52525b;
@@ -203,6 +204,22 @@
     .message.assistant em { font-style: italic; }
     .message.assistant ul, .message.assistant ol { margin: 10px 0 10px 25px; }
     .message.assistant li { margin-bottom: 5px; }
+
+    /* --- ADDED: Assistant Message Links --- */
+    .message.assistant .message-content a {
+      color: var(--accent); /* Use the existing accent color for unvisited links */
+      text-decoration: underline;
+      word-break: break-all; /* Prevents long URLs from breaking layout */
+    }
+    .message.assistant .message-content a:visited {
+      color: var(--link-visited-color); /* Light purple for visited links */
+    }
+    .message.assistant .message-content a:hover,
+    .message.assistant .message-content a:active {
+      color: var(--send-button-hover-bg); /* Darker purple, matches send button hover */
+      text-decoration: underline; /* Ensure underline persists */
+    }
+    /* --- END ADDED --- */
 
     /* Error message */
      .message.error { align-self: flex-start; align-items: flex-start; }
@@ -506,9 +523,24 @@
         return temp.innerHTML;
     }
 
+    // --- MODIFIED: renderMarkdown function ---
     function renderMarkdown(text) {
         if (!text) return '';
-        let html = sanitizeHTML(text);
+        let html = sanitizeHTML(text); // Step 1: Sanitize the entire input first
+
+        // Step 2: Autolink URLs (after sanitization, before other markdown processing)
+        // Regex for URLs (http, https, ftp, and www domains)
+        const urlRegex = /(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_!#:,.;]*[-A-Z0-9+&@#\/%=~_])|(\bwww\.[-A-Z0-9+&@#\/%?=~_!#:,.;]*[-A-Z0-9+&@#\/%=~_])/gi;
+        html = html.replace(urlRegex, function(matchedUrl) {
+            let href = matchedUrl;
+            if (matchedUrl.toLowerCase().startsWith('www.')) {
+                href = 'http://' + matchedUrl; // Prepend http:// for www links
+            }
+            // matchedUrl is already sanitized text content for the link's display
+            return `<a href="${href}" target="_blank" rel="noopener noreferrer">${matchedUrl}</a>`;
+        });
+
+        // Step 3: Process other markdown elements
         // Code blocks (``` ```)
         html = html.replace(/```(\w*?\n)?([\s\S]*?)```/g, (match, lang, code) => {
             const cleanedCode = code.endsWith('\n') ? code.slice(0, -1) : code;
@@ -522,35 +554,65 @@
         // Italic (* or _) - Careful not to match bold
         html = html.replace(/(?<![*\\])\*(?![*\s])(.*?)(?<![*\s])\*(?![*\\])/g, '<em>$1</em>');
         html = html.replace(/(?<![_\\])_(?![_\s])(.*?)(?<![_\s])_(?![_\\])/g, '<em>$1</em>');
+
         // --- Handling Newlines and Lists ---
+        // Split by <pre> and <code> tags to process content outside them
         const parts = html.split(/(<pre>[\s\S]*?<\/pre>|<code.*?>[\s\S]*?<\/code>)/);
         let processedHtml = '';
-        for (let i = 0; i < parts.length; i++) {
-            if (parts[i] && !parts[i].startsWith('<pre') && !parts[i].startsWith('<code')) {
-                let segment = parts[i];
-                segment = segment.replace(/^(?:<br>|\s)*([*+-])\s+(.*?)(?=<br>|\s*$)/gm, (match, marker, item) => `<li>${item.trim()}</li>`);
-                segment = segment.replace(/(<li>.*?<\/li>)+/gs, '<ul>$&</ul>');
-                segment = segment.replace(/<\/ul>\s*<ul>/g, '');
-                segment = segment.replace(/<ul>\s*/g, '<ul>').replace(/\s*<\/ul>/g, '</ul>');
-                // Convert newlines to <br> EXCEPT inside <ul>...</ul>
-                let inList = false;
-                segment = segment.split(/(\n)/).map(line => {
-                   if (line.includes('<ul>')) inList = true;
-                   if (line.includes('<\/ul>')) inList = false;
-                   if (line === '\n' && !inList) return '<br>';
-                   return line;
-                }).join('');
 
-                processedHtml += segment;
+        for (let i = 0; i < parts.length; i++) {
+            if (parts[i] && (parts[i].startsWith('<pre') || parts[i].startsWith('<code'))) {
+                processedHtml += parts[i]; // Add code blocks/inline code back unmodified
             } else if (parts[i]) {
-                processedHtml += parts[i]; // Add code blocks back unmodified
+                let segment = parts[i];
+
+                // Process lists:
+                // This regex targets lines starting with list markers, possibly after <br> or whitespace.
+                // The item text (which might include our new <a> tags) is captured.
+                segment = segment.replace(/^(?:<br\s*\/?>|\s)*([*+-])\s+(.*?)(?=(?:<br\s*\/?>|$))/gm, (match, marker, item) => {
+                    return `<li>${item.trim()}</li>`;
+                });
+
+                // Wrap consecutive <li>s in <ul>
+                segment = segment.replace(/(<li>.*?<\/li>)+/gs, (match) => {
+                    return `<ul>${match}</ul>`;
+                });
+                // Combine adjacent <ul>s that might have been separated by whitespace handled by regex
+                segment = segment.replace(/<\/ul>\s*<ul>/g, '');
+
+                // Convert newlines to <br> EXCEPT inside <ul>...</ul> blocks
+                let inList = false;
+                let newSegmentLines = [];
+                const lines = segment.split(/(\n)/); // Split by newline, keeping the newline character
+
+                for (const line of lines) {
+                    if (line.includes('<ul>')) inList = true;
+
+                    if (line === '\n') {
+                        if (!inList) newSegmentLines.push('<br>');
+                        // else, newlines inside list context are typically handled by <li> structure or ignored
+                    } else {
+                        newSegmentLines.push(line);
+                    }
+                    if (line.includes('<\/ul>')) inList = false;
+                }
+                segment = newSegmentLines.join('');
+                processedHtml += segment;
             }
         }
-        html = processedHtml.replace(/<ul><br>/g, '<ul>').replace(/<br><\/ul>/g, '</ul>'); // Cleanup inside lists
-        html = html.replace(/<\/ul><br><ul>/g, ''); // Cleanup between lists
-        html = html.replace(/<ul>\s*<\/ul>/g, ''); // Remove empty lists
+        html = processedHtml;
+
+        // Final cleanups for lists and <br> tags:
+        html = html.replace(/<ul><br\s*\/?>/g, '<ul>'); // Remove <br> immediately after <ul>
+        html = html.replace(/<br\s*\/?>\s*<\/ul>/g, '</ul>'); // Remove <br> immediately before </ul>
+        // Remove multiple <br>s between list blocks, effectively merging them if they were meant to be one.
+        html = html.replace(/<\/ul>(?:\s*<br\s*\/?>\s*)+<ul>/g, '</ul><ul>');
+        // Remove any empty <ul></ul> tags that might result from processing.
+        html = html.replace(/<ul>\s*(?:<br\s*\/?>\s*)*<\/ul>/g, '');
+
         return html;
     }
+    // --- END MODIFIED ---
 
 
     function setSendingState(sending) {
