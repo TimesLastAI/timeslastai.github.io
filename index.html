@@ -515,6 +515,42 @@
   </div>
 
   <script>
+    // --- Console Overrides (Place AT THE VERY TOP of the script) ---
+    (function() { // IIFE to not pollute global scope with originalConsole
+        const originalConsole = {
+            log: console.log.bind(console),
+            warn: console.warn.bind(console),
+            error: console.error.bind(console)
+        };
+
+        function filterGeminiMessages(args) {
+            const newArgs = Array.from(args).map(arg => {
+                if (typeof arg === 'string' && arg.toLowerCase().includes('gemini')) {
+                    return "Error";
+                } else if (arg instanceof Error) {
+                    if (arg.message && typeof arg.message === 'string' && arg.message.toLowerCase().includes('gemini')) {
+                        // Replace the Error object itself with the string "Error" for console display
+                        return "Error";
+                    }
+                    return arg; // Pass through non-Gemini Error objects
+                }
+                return arg; // Pass through other types
+            });
+            return newArgs;
+        }
+
+        console.log = function() {
+            originalConsole.log.apply(console, filterGeminiMessages(arguments));
+        };
+        console.warn = function() {
+            originalConsole.warn.apply(console, filterGeminiMessages(arguments));
+        };
+        console.error = function() {
+            originalConsole.error.apply(console, filterGeminiMessages(arguments));
+        };
+    })();
+    // --- End Console Overrides ---
+
     const BACKEND_URL = "https://bn9u12783t.onrender.com/chat";
     const CONVERSATION_PREFIX = 'chatHistory_';
     const MAX_TITLE_LENGTH = 35;
@@ -654,7 +690,7 @@
         const messageContentDiv = document.createElement('div');
         messageContentDiv.className = 'message-content';
         const displayTimestamp = timestamp || getTimestamp();
-        let mediaSrc = null; // To keep track of Object URLs for potential revocation
+        let mediaSrc = null; 
 
         if (role === 'user') {
             if (fileInfo && fileInfo.name) {
@@ -702,7 +738,7 @@
                     }
                 }
 
-                if (!isMediaFile) { // Fallback to generic file block
+                if (!isMediaFile) { 
                     fileBlock.className = 'file-block generic-file-block';
                     const sizeDisplay = (typeof fileInfo.size === 'number' && fileInfo.size !== '?') ? formatBytes(fileInfo.size) : (fileInfo.size === '?' ? '' : (fileInfo.size || ''));
                     const typeDisplay = (fileInfo.type && fileInfo.type !== 'unknown') ? fileInfo.type.split('/')[1]?.toUpperCase() : 'FILE';
@@ -716,31 +752,39 @@
                             <div class="file-info">${sanitizeHTML(fileInfoText)}</div>
                         </div>`;
                 }
-                if (fileBlock.innerHTML) { // Only append if file block has content
+                if (fileBlock.innerHTML) { 
                     messageContentDiv.appendChild(fileBlock);
                 }
             }
             if (textContent && textContent.trim()) {
                 const bubble = document.createElement('div');
                 bubble.className = 'message-bubble';
-                bubble.innerHTML = sanitizeHTML(textContent);
+                bubble.innerHTML = sanitizeHTML(textContent); 
                 messageContentDiv.appendChild(bubble);
             }
         } else if (role === 'assistant') {
             if (textContent && textContent.trim()) {
-                messageContentDiv.innerHTML = renderMarkdown(textContent);
+                if (textContent === "Error") { // If it's the generic "Error" message
+                    messageContentDiv.innerHTML = sanitizeHTML(textContent);
+                } else {
+                    messageContentDiv.innerHTML = renderMarkdown(textContent);
+                }
             }
         } else if (role === 'error') {
             if (textContent && textContent.trim()) {
-                const errorPrefix = "<strong>Error:</strong> ";
-                messageContentDiv.innerHTML = textContent.toLowerCase().startsWith('error:') ? sanitizeHTML(textContent) : errorPrefix + sanitizeHTML(textContent);
+                if (textContent === "Error") { // If it's specifically the generic "Error" message
+                     messageContentDiv.innerHTML = sanitizeHTML(textContent);
+                } else {
+                    const errorPrefix = "<strong>Error:</strong> ";
+                    messageContentDiv.innerHTML = textContent.toLowerCase().startsWith('error:') ? sanitizeHTML(textContent) : errorPrefix + sanitizeHTML(textContent);
+                }
             }
         }
 
         if (!messageContentDiv.hasChildNodes()) {
             console.warn("Skipping message element creation, no visual content for role:", role, "Text:", textContent, "File:", fileInfo);
             if (mediaSrc && mediaSrc.startsWith('blob:') && fileInfo && fileInfo.type && fileInfo.type.startsWith('image/')) {
-                URL.revokeObjectURL(mediaSrc); // Revoke unused Object URL
+                URL.revokeObjectURL(mediaSrc); 
             }
             return null;
         }
@@ -775,6 +819,8 @@
                  setTimeout(() => URL.revokeObjectURL(mediaSrc), 5000);
             }
         }
+        // Return what should be stored (original text might be needed if transformation is only for display)
+        // However, prompt implies "Error" should be stored too.
         return { role, text: textContent || "", fileInfo, timestamp: displayTimestamp };
     }
 
@@ -858,7 +904,9 @@
              const textPart = item.parts.find(p => p.text); const filePart = item.parts.find(p => p.file_data);
              let text = textPart ? textPart.text : ''; let fileInfo = null;
              if (filePart && filePart.file_data) { fileInfo = { name: filePart.file_data.file_uri?.split('/').pop() || 'file' }; }
-             let displayRole = item.role === 'user' ? 'user' : 'assistant'; if (text.toLowerCase().startsWith('error:')) displayRole = 'error';
+             let displayRole = item.role === 'user' ? 'user' : 'assistant'; 
+             // If text is "Error", it's an error. If it starts with "Error:", it's an error.
+             if (text === "Error" || (text && text.toLowerCase().startsWith('error:'))) displayRole = 'error';
              return { role: displayRole, text: text, fileInfo: fileInfo };
          });
          const title = getConversationTitle(titleData); const date = Date.now();
@@ -894,8 +942,9 @@
                 currentConversationId = conversationId; messagesContainer.innerHTML = ''; currentHistory = []; removeFile();
                 storedData.history.forEach(savedItem => {
                     if (!savedItem || !savedItem.role || !savedItem.parts || !Array.isArray(savedItem.parts)) { return; }
-                    currentHistory.push({ role: savedItem.role, parts: savedItem.parts });
-                    let textForDisplay = ''; let fileInfoForDisplay = null; let displayRole = (savedItem.role === 'user') ? 'user' : 'assistant';
+                    currentHistory.push({ role: savedItem.role, parts: savedItem.parts }); // Push original structure for resending history
+                    
+                    let textForDisplay = ''; let fileInfoForDisplay = null;
                     savedItem.parts.forEach(part => {
                         if (part.text) { textForDisplay += (textForDisplay ? " " : "") + part.text; }
                         else if (part.file_data && part.file_data.file_uri) {
@@ -907,7 +956,29 @@
                             };
                         }
                     });
-                    if (savedItem.role === 'model' && textForDisplay.toLowerCase().startsWith('error:')) { displayRole = 'error'; }
+
+                    let displayRole = (savedItem.role === 'user') ? 'user' : 'assistant';
+                    
+                    // Determine if it's an error based on content (e.g. "Error:" prefix)
+                    if (savedItem.role === 'model' && textForDisplay && textForDisplay.toLowerCase().startsWith('error:')) {
+                        displayRole = 'error';
+                    }
+
+                    // If textForDisplay contains "gemini" and is in an error context, replace with "Error"
+                    // This handles older data or cases where full conversion didn't happen before saving.
+                    if (textForDisplay && typeof textForDisplay === 'string' && textForDisplay.toLowerCase().includes('gemini')) {
+                        if (displayRole === 'error' || // Already identified as error
+                            (savedItem.role === 'model' && textForDisplay.toLowerCase().includes('error'))) { // From model and contains "error" keyword
+                            textForDisplay = "Error";
+                            displayRole = 'error'; // Ensure it's treated as an error role
+                        }
+                    }
+                    
+                    // If textForDisplay became "Error" (literal string) ensure displayRole is 'error'
+                    if (textForDisplay === "Error") {
+                        displayRole = 'error';
+                    }
+
                     createMessageElement(displayRole, textForDisplay, fileInfoForDisplay, savedItem.timestamp || getTimestamp(), false);
                 });
                 highlightCurrentConversation(conversationId); scrollChatToBottom('instant');
@@ -932,7 +1003,7 @@
             alert("Please configure the BACKEND_URL constant in the script."); return;
         }
         const textInput = chatInput.value.trim();
-        const fileToProcess = selectedFile; // Keep a reference before clearing
+        const fileToProcess = selectedFile; 
 
         if (!textInput && !fileToProcess) return;
 
@@ -950,21 +1021,18 @@
             fileObject: fileToProcess
         } : null;
 
-        // Create the user message element in UI *before* clearing inputs
         createMessageElement('user', textInput, userFileInfoForDisplay, null, true);
 
-        // Clear inputs *after* creating the UI element and *before* the async call
         chatInput.value = '';
         adjustTextareaHeight();
-        if (fileToProcess) { // Only remove file if one was actually selected for this message
-            removeFile(); // This will set selectedFile to null
+        if (fileToProcess) { 
+            removeFile(); 
         }
-
 
         showTypingIndicator();
         const formData = new FormData();
         if (textInput) formData.append('prompt', textInput);
-        if (fileToProcess) formData.append('file', fileToProcess, fileToProcess.name); // Use the original fileToProcess
+        if (fileToProcess) formData.append('file', fileToProcess, fileToProcess.name); 
 
         const historyToSend = currentHistory.filter(h => h && h.role && h.parts && h.parts.length > 0);
         formData.append('history', JSON.stringify(historyToSend));
@@ -982,21 +1050,40 @@
                  }
             }
 
+            let displayRole = 'assistant';
+            let messageText = "";
+
             if (!response.ok || data.error) {
-                let errorMsg = data.error || `Request failed with status ${response.status}`;
-                createMessageElement('error', errorMsg);
-                assistantMessageForHistory = { role: 'model', parts: [{ text: `Error: ${errorMsg}` }] };
+                messageText = data.error || `Request failed with status ${response.status}`;
+                displayRole = 'error';
+                if (typeof messageText === 'string' && messageText.toLowerCase().includes('gemini')) {
+                    messageText = "Error";
+                }
             } else if (data.reply !== undefined && data.reply !== null) {
-                createMessageElement('assistant', data.reply);
-                assistantMessageForHistory = { role: 'model', parts: [{ text: data.reply }] };
+                messageText = data.reply;
+                // Heuristic: if a successful reply contains "gemini" and "error", treat it as an error display-wise
+                if (typeof messageText === 'string' && messageText.toLowerCase().includes('gemini') && messageText.toLowerCase().includes('error')) {
+                    messageText = "Error";
+                    displayRole = 'error';
+                }
             } else {
-                 createMessageElement('error', "Received an empty or invalid response from the assistant.");
-                 assistantMessageForHistory = { role: 'model', parts: [{ text: "Error: Invalid response structure" }] };
+                 messageText = "Received an empty or invalid response from the assistant.";
+                 displayRole = 'error';
             }
+            
+            createMessageElement(displayRole, messageText);
+            assistantMessageForHistory = { role: 'model', parts: [{ text: messageText }] }; // Store potentially modified message
+
         } catch (error) {
             removeTypingIndicator();
-            createMessageElement('error', `Network error: ${error.message}. Please check your connection.`);
-            assistantMessageForHistory = { role: 'model', parts: [{ text: `Error: Network error - ${error.message}` }] };
+            let networkErrorMsg = `Network error: ${error.message}. Please check your connection.`;
+            if (typeof error.message === 'string' && error.message.toLowerCase().includes('gemini')) {
+                networkErrorMsg = "Error";
+            } else if (networkErrorMsg.toLowerCase().includes('gemini')) { // Check the full constructed message too
+                networkErrorMsg = "Error";
+            }
+            createMessageElement('error', networkErrorMsg);
+            assistantMessageForHistory = { role: 'model', parts: [{ text: networkErrorMsg }] };
         } finally {
             if (userMessageToSend.parts.length > 0) {
                 currentHistory.push(userMessageToSend);
@@ -1004,7 +1091,7 @@
             if (assistantMessageForHistory) {
                 currentHistory.push(assistantMessageForHistory);
             }
-            setSendingState(false); // Also updates send button state
+            setSendingState(false); 
             saveCurrentConversation();
             scrollChatToBottom();
         }
