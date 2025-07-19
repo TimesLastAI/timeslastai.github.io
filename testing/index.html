@@ -1,0 +1,1739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="theme-color" content="#1f1f1f">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>AI Chat</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+  
+  <!-- Highlight.js CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+  <style>
+    /* Theme variables - DARK THEME (Purple Accent) */
+    :root {
+      --body-bg: #121212;
+      --bg: #121212;
+      --header-bg: transparent;
+      --input-bg: #1f1f1f; /* Darker input box */
+      --suggestion-bg: #121212; /* Darker suggestion prompts */
+      --popup-bg: #202020; /* Darker settings popup */
+      --popup-input-bg: #131313; /* Settings popup input fields */
+      --bubble-user: #3f3f46;
+      --bubble-user-text: #e4e4e7;
+      --bubble-assistant-text: #e4e4e7;
+      --bubble-error-bg: #581c1c;
+      --bubble-error-border: #f87171;
+      --bubble-error-text: #fca5a5;
+      --bubble-file-bg: #4b5563;
+      --bubble-file-text: #e4e4e7;
+      --bubble-file-info-text: #a1a1aa;
+      --text: #e4e4e7;
+      --text-muted: #a1a1aa;
+      --accent: #8b5cf6;
+      --link-visited-color: #a78bfa;
+      --input-border: #4a4a4a;
+      --input-border-focus: var(--accent);
+      --button-disabled-bg: #52525b;
+      --send-button-bg: var(--accent);
+      --send-button-hover-bg: #7c3aed;
+      --send-button-icon: #ffffff;
+      --scrollbar-thumb: #3a3a3a;
+      --scrollbar-thumb-hover: #555555;
+      --spinner-border: #52525b;
+      --spinner-top: var(--accent);
+      --textarea-scrollbar-thumb: #52525b;
+      --textarea-scrollbar-track: var(--body-bg);
+
+      --sidebar-width: 260px;
+      --sidebar-bg: var(--body-bg);
+      --sidebar-border: var(--input-bg);
+      --conversation-hover-bg: var(--input-bg);
+    }
+
+    /* Reset & base */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { height: 100%; }
+    body {
+      background: var(--body-bg);
+      color: var(--text);
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* --- Sidebar --- */
+    #sidebar {
+      width: 0; background: var(--sidebar-bg); border-right: 1px solid var(--sidebar-border);
+      display: flex; flex-direction: column; transition: width 0.3s ease;
+      z-index: 40; flex-shrink: 0; overflow: hidden; height: 100%;
+    }
+    #sidebar.open { width: var(--sidebar-width); }
+    #sidebar > * { opacity: 0; transition: opacity 0.2s ease; }
+    #sidebar.open > * { opacity: 1; transition-delay: 0.15s; }
+    .sidebar-header {
+       padding: 10px 15px; border-bottom: 1px solid var(--sidebar-border);
+       display: flex; align-items: center; justify-content: space-between;
+       height: 55px; flex-shrink: 0;
+    }
+    .sidebar-logo-link {
+        display: flex; align-items: center; color: var(--text-muted);
+        transition: color 0.2s ease, transform 0.1s ease-out;
+    }
+    .sidebar-logo-link:hover { color: var(--accent); transform: scale(1.08); }
+    .sidebar-logo-icon { width: 28px; height: 28px; }
+    #sidebarCloseBtn {
+       background: transparent; border: none; color: var(--text-muted);
+       border-radius: 50%; width: 36px; height: 36px; /* Bigger click area */
+       display: flex; align-items: center; justify-content: center;
+       cursor: pointer; transition: background-color 0.2s, color 0.2s, transform 0.1s ease-out;
+       padding: 0;
+    }
+    #sidebarCloseBtn:hover { background-color: var(--input-bg); color: var(--text); transform: scale(1.08); }
+    #sidebarCloseBtn:active { transform: scale(0.95); }
+    .sidebar-close-icon { width: 24px; height: 24px; display: block; }
+    
+    .sidebar-nav {
+        padding: 10px;
+        border-bottom: 1px solid var(--sidebar-border);
+    }
+    .new-chat-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 10px;
+        border-radius: 6px;
+        background-color: var(--input-bg);
+        color: var(--text);
+        border: 1px solid var(--input-border);
+        cursor: pointer;
+        transition: background-color 0.2s, border-color 0.2s;
+        font-size: 14px;
+        gap: 8px;
+    }
+    .new-chat-btn:hover {
+        background-color: var(--scrollbar-thumb);
+        border-color: var(--accent);
+    }
+    .new-chat-btn .header-icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    .sidebar-content { flex-grow: 1; overflow-y: auto; padding: 0; }
+    .nav-title {
+        padding: 15px 15px 5px;
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: 500;
+        text-transform: uppercase;
+    }
+    .sidebar-content::-webkit-scrollbar { width: 6px; }
+    .sidebar-content::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-content::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+    .sidebar-content::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+    #conversationsList { padding: 0 10px 10px; }
+    .conversation-item {
+      padding: 10px 15px; cursor: pointer; color: var(--text-muted);
+      font-size: 14px; border-radius: 6px;
+      transition: background .2s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border-bottom: none; /* Remove border */
+    }
+    .conversation-item:hover, .conversation-item.active { background: var(--conversation-hover-bg); color: var(--text); }
+    .conversation-item .conv-title { display: block; font-weight: 500; color: var(--text); margin-bottom: 3px;}
+    .conversation-item .conv-date { font-size: 11px; }
+
+    /* --- Main Content Area --- */
+    #main {
+      flex-grow: 1; display: flex; flex-direction: column;
+      height: 100vh; overflow: hidden;
+      transition: margin-left 0.3s ease; position: relative;
+    }
+
+    /* Header */
+    .header {
+      background: var(--header-bg); padding: 0 16px;
+      display: flex; justify-content: space-between; align-items: center;
+      position: absolute; top: 0; left: 0; right: 0;
+      z-index: 20; flex-shrink: 0; height: 55px;
+      border-bottom: 1px solid transparent; /* Transparent border initially */
+      transition: border-color 0.3s ease;
+    }
+    #main.chat-active .header {
+        border-bottom: 1px solid var(--input-border);
+    }
+    .header .left-controls { display: flex; gap: 10px; align-items: center; }
+    .header .right-controls { display: flex; align-items: center; gap: 8px; }
+    .header button {
+      background: transparent; border: none; color: var(--text-muted);
+      padding: 8px; border-radius: 6px; cursor: pointer;
+      transition: all 0.2s ease-out;
+      font-size: 14px; display: flex; align-items: center; justify-content: center;
+      width: 38px; height: 38px; /* Bigger click area */
+    }
+    .header button:hover { background: var(--input-bg); color: var(--text); transform: scale(1.03); }
+    .header button:active { transform: scale(0.96); }
+    .header-icon { width: 24px; height: 24px; display: block; } /* Bigger Icons */
+    
+    /* Hide sidebar open button when sidebar is open */
+    body.sidebar-open #sidebarOpenBtn {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        width: 0;
+        padding: 0;
+        margin-left: -10px; /* Collapse space */
+    }
+
+    /* Messages area & Splash Screen Wrapper */
+    .messages-wrapper {
+      flex-grow: 1; overflow-y: auto; background: var(--bg);
+      padding: 16px; padding-top: 60px; /* Space for header + 5px gap */
+      position: relative;
+      display: flex; flex-direction: column;
+    }
+    #main.chat-active .messages-wrapper {
+        padding-bottom: 110px;
+    }
+    .messages {
+      max-width: 945px; margin: 0 auto; display: flex;
+      flex-direction: column; gap: 4px; padding-bottom: 10px;
+      width: 100%;
+    }
+    .messages-wrapper::-webkit-scrollbar { width: 8px; }
+    .messages-wrapper::-webkit-scrollbar-track { background: transparent; }
+    .messages-wrapper::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+    .messages-wrapper::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+    /* --- New Chat Splash Screen --- */
+    #newChatSplash {
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        text-align: center; flex-grow: 1; width: 100%;
+        opacity: 0; transition: opacity 0.3s ease-out;
+        pointer-events: none;
+    }
+    #main.splash-visible #newChatSplash {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .splash-logo {
+        max-width: 750px; /* Bigger logo */
+        width: 90%; /* Responsive logo */
+        height: auto;
+        margin-bottom: 24px; opacity: 0.8;
+    }
+    #splashInputArea {
+        width: 100%;
+        max-width: 995px; /* Match chat input width */
+        padding: 0 16px;
+    }
+    .suggestion-prompts-container {
+        display: flex; flex-direction: column; gap: 8px;
+        margin-top: 24px; align-items: center;
+        max-width: 995px; width: 100%; padding: 0 16px;
+    }
+    .suggestion-prompts-line {
+        display: flex; justify-content: center;
+        width: 100%;
+        gap: 8px; flex-wrap: wrap;
+    }
+    .suggestion-item {
+        background-color: var(--suggestion-bg); /* Darker prompts */
+        border: 1px solid var(--input-border); color: var(--text-muted);
+        padding: 8px 14px; border-radius: 8px;
+        font-size: 14px; cursor: pointer; display: flex;
+        align-items: center; gap: 8px;
+        transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+        text-decoration: none;
+        justify-content: center;
+    }
+    .suggestion-item:hover {
+        background-color: var(--scrollbar-thumb);
+        border-color: var(--input-border-focus); color: var(--text);
+    }
+    .suggestion-item-icon { font-size: 16px; }
+
+    /* Message base */
+    .message {
+      opacity: 0; transform: translateY(10px); animation: fadeInUp .3s forwards ease-out;
+      position: relative; max-width: 90%; margin-bottom: 12px;
+      display: flex; flex-direction: column;
+    }
+    @keyframes fadeInUp { to { opacity: 1; transform: translateY(0); } }
+    
+    /* Message Footer (Copy button + Timestamp) */
+    .message-footer {
+        display: flex; align-items: center; gap: 8px;
+        margin-top: 4px; padding: 0 5px;
+    }
+    .message.user .message-footer { justify-content: flex-end; }
+    .message.assistant .message-footer, .message.error .message-footer { justify-content: flex-start; }
+    .message .timestamp { font-size: 10px; color: var(--text-muted); }
+    .copy-btn {
+        background: none; border: none; color: var(--text-muted);
+        cursor: pointer; padding: 2px; border-radius: 4px;
+        display: flex; align-items: center;
+        opacity: 0; transition: opacity 0.2s, background-color 0.2s, color 0.2s;
+    }
+    .message.user:hover .copy-btn {
+        opacity: 1;
+    }
+    .message.assistant .copy-btn {
+        opacity: 1; /* Always visible for assistant */
+        margin-left: -5px;
+    }
+    .copy-btn:hover { background-color: var(--input-bg); color: var(--text); }
+    .copy-btn svg { width: 14px; height: 14px; }
+    .copy-btn.copied { cursor: default; }
+    .copy-btn.copied:hover { background-color: transparent; }
+    .copy-btn.copied span { font-size: 11px; color: var(--text-muted); }
+    
+    /* User Message */
+    .message.user { align-self: flex-end; align-items: flex-end; }
+    .message.user .message-content { display: flex; flex-direction: column; align-items: flex-end; }
+    .message.user .message-bubble {
+        background: var(--bubble-user); color: var(--bubble-user-text);
+        padding: 10px 14px; border-radius: 16px; border-bottom-right-radius: 4px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.15); word-break: break-all;
+        word-wrap: break-word; white-space: pre-wrap; 
+        width: fit-content; max-width: 100%; order: 2; margin-top: 4px;
+    }
+    .message.user .message-bubble:empty { display: none; margin-top: 0;}
+    
+    /* User Message - File Block Styling */
+    .message.user .file-block-container {
+        display: flex; flex-direction: column; gap: 4px;
+        order: 1; align-items: flex-end; width: 100%;
+    }
+    .message.user .file-block { 
+        background: var(--bubble-file-bg); color: var(--bubble-file-text);
+        border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        width: fit-content; overflow: hidden; box-sizing: border-box;
+    }
+    .message.user .media-file-block {
+        padding: 0; display: flex; flex-direction: column; max-width: 320px; width: 100%;
+    }
+    .media-preview-container { 
+        width: 100%; max-height: 280px; background-color: var(--body-bg);
+        display: flex; align-items: center; justify-content: center; position: relative;
+        min-height: 100px;
+    }
+    .media-preview-container.missing-media::before {
+        content: 'Local file not found:\A' attr(data-missing-filename);
+        white-space: pre-wrap; text-align: center;
+        font-size: 12px; color: var(--text-muted);
+        padding: 10px; max-width: 100%;
+        overflow: hidden; text-overflow: ellipsis;
+    }
+    .media-preview-container img, .media-preview-container video {
+        display: block; max-width: 100%; max-height: 280px;
+        width: auto; height: auto; object-fit: contain;
+    }
+    .media-preview-container video { width: 100%; height: 100%; }
+    .media-caption { padding: 8px 10px; }
+    .media-caption .file-name {
+        font-size: 13px; font-weight: 500; color: var(--bubble-file-text);
+        white-space: nowrap; text-overflow: ellipsis; overflow: hidden; margin-bottom: 2px;
+    }
+    .media-caption .file-info { font-size: 11px; color: var(--bubble-file-info-text); white-space: nowrap; }
+    .message.user .multi-image-block {
+        max-width: 320px; width: 100%; padding: 8px; display: flex; flex-direction: column; 
+    }
+    .multi-image-preview-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); 
+        gap: 4px; width: 100%; 
+    }
+    .multi-image-preview-grid .img-thumb-link {
+        display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 4px;
+        overflow: hidden; background-color: var(--body-bg); position: relative; cursor: pointer;
+    }
+    .multi-image-preview-grid .img-thumb-link img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .multi-image-block .multi-image-caption-details { text-align: left; padding-top: 6px; }
+    .multi-image-block .multi-image-caption-details .file-name { font-size: 13px; font-weight: 500; color: var(--bubble-file-text); }
+    .multi-image-block .multi-image-caption-details .file-info { font-size: 11px; color: var(--bubble-file-info-text); }
+    .message.user .generic-file-block {
+        padding: 8px 12px; display: flex; align-items: center; gap: 10px; max-width: 320px;
+        width: 100%;
+    }
+    .message.user .generic-file-block .file-icon svg { display: block; }
+    .message.user .generic-file-block .file-icon svg path[fill="#F8CA27"] { fill: var(--accent); }
+    .message.user .generic-file-block .file-icon svg path[fill="#F8EDC7"] { fill: var(--bubble-file-text); }
+    .message.user .generic-file-block .file-details { overflow: hidden; }
+    .message.user .generic-file-block .file-name { font-size: 14px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+    .message.user .generic-file-block .file-info { font-size: 12px; color: var(--bubble-file-info-text); white-space: nowrap; }
+
+    /* Assistant message */
+    .message.assistant { align-self: flex-start; align-items: flex-start;}
+    .message.assistant .message-content {
+        padding: 4px 0; color: var(--bubble-assistant-text);
+        word-wrap: break-word; max-width: 100%; line-height: 1.5;
+    }
+    .message.assistant .code-block-wrapper { 
+        position: relative; 
+        margin: 10px 0; 
+    }
+    
+    /* --- Table styles --- */
+    .message.assistant table {
+        display: block; overflow-x: auto; 
+        width: 100%; border-collapse: collapse; margin: 1em 0;
+        border: 1px solid var(--input-border); border-radius: 6px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .message.assistant th, .message.assistant td {
+        padding: 10px 14px; border-bottom: 1px solid var(--input-border);
+        text-align: left; white-space: nowrap; 
+    }
+    .message.assistant thead th {
+        background-color: var(--input-bg); font-weight: 600; color: var(--text);
+        border-bottom: 2px solid var(--input-border-focus);
+    }
+    .message.assistant tbody tr:nth-child(even) { background-color: var(--body-bg); }
+    .message.assistant tbody tr:hover { background-color: var(--input-bg); }
+    .message.assistant th:first-child, .message.assistant td:first-child { border-left: none; }
+    .message.assistant th:last-child, .message.assistant td:last-child { border-right: none; }
+    
+    .message.assistant pre {
+        padding: 12px; padding-top: 40px; border-radius: 6px; 
+        overflow-x: auto; border: 1px solid var(--input-bg);
+        font-size: 0.9em; margin: 0;
+    }
+    .code-language-name {
+        position: absolute; top: 10px; left: 12px;
+        font-size: 12px; font-weight: 500; color: var(--text-muted); text-transform: capitalize;
+    }
+    .code-copy-btn {
+        position: absolute; top: 8px; right: 8px;
+        background-color: var(--input-bg); color: var(--text-muted);
+        border: 1px solid var(--input-border); border-radius: 5px;
+        padding: 4px 8px; font-size: 12px; cursor: pointer;
+        display: flex; align-items: center; gap: 6px;
+        opacity: 1; transition: background-color 0.2s;
+    }
+    .code-copy-btn:hover { background-color: var(--scrollbar-thumb); }
+    .code-copy-btn.copied { cursor: default; }
+    .code-copy-btn.copied:hover { background-color: var(--input-bg); }
+    .code-copy-btn.copied span { font-size: 11px; color: var(--text-muted); }
+    .code-copy-btn svg { width: 14px; height: 14px; }
+    .message.assistant code { font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace; }
+    .message.assistant code:not(pre code) { background-color: var(--body-bg); padding: 2px 5px; border-radius: 4px; font-size: 0.9em; border: 1px solid var(--input-bg); }
+    .message.assistant strong { font-weight: 600; color: var(--text); }
+    .message.assistant em { font-style: italic; }
+    .message.assistant ul, .message.assistant ol { margin: 10px 0 10px 25px; }
+    .message.assistant li { margin-bottom: 5px; }
+    .message.assistant .message-content a { color: var(--accent); text-decoration: underline; word-break: break-all; }
+    .message.assistant .message-content a:visited { color: var(--link-visited-color); }
+    .message.assistant .message-content a:hover, .message.assistant .message-content a:active { color: var(--send-button-hover-bg); text-decoration: underline; }
+
+    /* Error message */
+    .message.error { align-self: flex-start; align-items: flex-start; }
+    .message.error .message-content {
+        padding: 10px 14px; color: var(--bubble-error-text);
+        background: var(--bubble-error-bg); border: 1px solid var(--bubble-error-border);
+        border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        width: fit-content; max-width: 100%;
+    }
+    .message.error .message-content strong { color: inherit; font-weight: 600; }
+    .message.error .timestamp { text-align: left; padding-left: 5px;}
+
+    .memory-saved-badge {
+        margin-bottom: 6px;
+        margin-left: 0px;
+    }
+    .memory-saved-badge button {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 12px; font-weight: 500; color: var(--text-muted);
+        background-color: var(--input-bg); border: 1px solid var(--input-border);
+        border-radius: 6px; padding: 3px 8px; cursor: default;
+    }
+    .memory-saved-badge svg { width: 14px; height: 14px; }
+
+    /* Typing indicator */
+    .typing-indicator {
+      margin-bottom: 12px; align-self: flex-start; opacity: 1; transform: none;
+      animation: fadeInUp .3s forwards ease-out; display: flex; align-items: center; gap: 8px;
+    }
+    .typing { display: flex; gap: 5px; align-items: center; padding: 8px 0; }
+    .typing-dot { width: 8px; height: 8px; background: var(--text-muted); border-radius: 50%; animation: blink 1.2s infinite ease-in-out; }
+    .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes blink { 0%, 80%, 100% { opacity: .3; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1); } }
+    .typing-indicator .timestamp { margin-top: 0; padding-left: 0; }
+
+    /* Input area */
+    .input-area {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      z-index: 30;
+      padding: 8px 0;
+      padding-bottom: calc(8px + env(safe-area-inset-bottom));
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #main.splash-visible .input-area {
+        position: relative; /* Behaves as block in splash layout */
+        bottom: auto;
+        padding-bottom: 0;
+    }
+    .input-container { max-width: 995px; margin: 0 auto; padding: 0 16px; position: relative; left: -5px; }
+    #filePreviewsContainer { display: none; padding: 5px 0 10px; margin-top: -5px; max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+    #filePreviewsContainer::-webkit-scrollbar { width: 6px; }
+    #filePreviewsContainer::-webkit-scrollbar-track { background: transparent; }
+    #filePreviewsContainer::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+    @keyframes fadeInUpSmall { to { opacity: 1; transform: translateY(0); } }
+    .file-preview-item { display: flex; align-items: center; justify-content: space-between; background: var(--bubble-file-bg); border-radius: 8px; padding: 6px 10px; opacity: 0; transform: translateY(5px); animation: fadeInUpSmall 0.3s forwards ease-out; }
+    .file-preview-details { display: flex; gap: 8px; align-items: center; min-width: 0; }
+    .file-preview-icon svg { display: block; width: 32px; height: 32px;}
+    .file-preview-icon svg path[fill="#F8CA27"] { fill: var(--accent); }
+    .file-preview-icon svg path[fill="#F8EDC7"] { fill: var(--bubble-file-text); }
+    .file-preview-text { overflow: hidden; }
+    .file-preview-name { font-size: 13px; color: var(--bubble-file-text); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+    .file-preview-info { font-size: 11px; color: var(--bubble-file-info-text); white-space: nowrap; }
+    .file-remove-btn { cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px; border-radius: 50%; transition: background 0.2s; flex-shrink: 0; border: none; background: none; }
+    .file-remove-btn:hover { background: rgba(128, 128, 128, 0.2); }
+    .file-remove-btn .icon svg { width: 14px; height: 14px; display: block;}
+    .file-remove-btn .icon svg path { fill: var(--text-muted); }
+    .input-inner { display: flex; align-items: flex-end; gap: 10px; }
+    .input-inner form {
+      display: flex;
+      width: 100%;
+      align-items: flex-end;
+      gap: 6px;
+      background: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 24px;
+      padding: 4px 4px 4px 12px;
+      transition: border-color .2s;
+    }
+    .input-inner form:focus-within { border-color: var(--input-border-focus); }
+    #chatInput {
+      flex: 1; padding: 10px; border: none;
+      border-radius: 0; background: transparent; color: var(--text);
+      font-size: 14px; transition: border-color .2s;
+      min-height: 40px; max-height: 150px; resize: none; line-height: 1.4;
+      overflow-y: auto; scrollbar-width: thin;
+      scrollbar-color: var(--textarea-scrollbar-thumb) var(--textarea-scrollbar-track);
+    }
+    #chatInput::-webkit-scrollbar { width: 8px; }
+    #chatInput::-webkit-scrollbar-track { background: var(--textarea-scrollbar-track); border-radius: 4px; }
+    #chatInput::-webkit-scrollbar-thumb { background-color: var(--textarea-scrollbar-thumb); border-radius: 4px; border: 2px solid var(--textarea-scrollbar-track); }
+    #chatInput::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+    #chatInput:focus { outline: none; }
+    #chatInput::placeholder { color: var(--text-muted); opacity: 0.7; }
+    .file-upload-btn-label {
+      width: 40px; height: 40px; border-radius: 50%; background: transparent;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      transition: background .2s ease, transform 0.1s ease-out;
+      flex-shrink: 0; border: none; padding: 0; color: var(--text-muted);
+    }
+    .file-upload-btn-label:hover { background: var(--input-bg); transform: scale(1.08); }
+    .file-upload-btn-label:active { transform: scale(0.96); }
+    .file-upload-btn-label input[type="file"] { display: none; }
+    .file-upload-btn-label .ds-icon svg { width: 20px; height: 20px; display: block; }
+    #sendBtn {
+      width: 40px; height: 40px; background: var(--send-button-bg); border: none;
+      border-radius: 50%; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: background .2s ease, opacity 0.2s ease, transform 0.1s ease-out;
+      flex-shrink: 0; padding: 0; color: var(--send-button-icon);
+    } 
+    #sendBtn:disabled { background: var(--button-disabled-bg); opacity: .6; cursor: default; transform: scale(1); }
+    #sendBtn:hover:not(:disabled) { background: var(--send-button-hover-bg); transform: scale(1.08); }
+    #sendBtn:active:not(:disabled) { transform: scale(0.96); }
+    .spinner { border: 3px solid var(--spinner-border); border-top: 3px solid var(--spinner-top); border-radius: 50%; width: 18px; height: 18px; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    #sendBtn.loading .send-icon { display: none; }
+
+    /* Settings & Minigames Popups */
+    .settings-popup { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0s 0.3s linear; }
+    .settings-popup.open { opacity: 1; visibility: visible; transition: opacity 0.3s ease, visibility 0s 0s linear; }
+    .settings-popup-content { background: var(--popup-bg); padding: 20px; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); width: 90%; max-width: 450px; color: var(--text); border: 1px solid var(--input-border); transform: scale(0.98); transition: opacity 0.2s ease, transform 0.2s ease; }
+    .settings-popup.open .settings-popup-content { transform: scale(1); }
+    .settings-popup-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--input-border); padding-bottom: 10px; margin-bottom: 15px; }
+    .settings-popup-header h2 { margin: 0; font-size: 1.2em; color: var(--text); }
+    .close-popup-btn { background: none; border: none; color: var(--text-muted); font-size: 24px; line-height: 1; cursor: pointer; padding: 0 5px; }
+    .close-popup-btn:hover { color: var(--text); }
+    .settings-popup-body label { display: block; margin-bottom: 5px; font-size: 14px; color: var(--text-muted); }
+    .settings-popup-body input[type="text"], #memoryListContainer .memory-item input { width: 100%; padding: 8px 10px; border: 1px solid var(--input-border); border-radius: 6px; background: var(--popup-input-bg); color: var(--text); font-size: 14px; margin-bottom: 10px; }
+    .settings-popup-body input[type="text"]:focus, #memoryListContainer .memory-item input:focus { outline: none; border-color: var(--input-border-focus); }
+    .settings-note { font-size: 12px; color: var(--text-muted); margin-bottom: 15px; }
+    .settings-section { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid var(--input-border); }
+    .settings-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0;}
+    .settings-section h4 { font-size: 1em; color: var(--text); margin-bottom: 10px; }
+    .settings-popup-body .checkbox-group label { display: flex; align-items: center; font-size: 13px; margin-bottom: 8px; cursor:pointer;}
+    .settings-popup-body .checkbox-group input[type="checkbox"] { margin-right: 8px; width: 16px; height: 16px; cursor:pointer;}
+    .settings-popup-footer { text-align: right; margin-top: 10px; }
+    .settings-popup-body button, .settings-popup-footer button {
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--input-border);
+        background-color: #3a3a3a;
+        color: var(--text);
+        cursor: pointer;
+        transition: background-color .2s, transform 0.1s ease-out;
+        font-size: 13px;
+    }
+    .settings-popup-body button:hover, .settings-popup-footer button:hover {
+        background-color: var(--scrollbar-thumb-hover);
+    }
+    .settings-popup-body button:active, .settings-popup-footer button:active {
+        transform: scale(0.96);
+    }
+    .settings-popup-footer button { background: var(--accent); color: var(--send-button-icon); border: none; font-size: 14px; padding: 8px 15px; }
+    .settings-popup-footer button:hover { background: var(--send-button-hover-bg); }
+    .settings-danger-btn {
+        background-color: #7f1d1d !important;
+        border-color: #b91c1c !important;
+        color: #fecaca !important;
+    }
+    .settings-danger-btn:hover { background-color: #991b1b !important; }
+    #memoryListContainer .memory-item { display: flex; gap: 8px; margin-bottom: 8px; }
+    #memoryListContainer .memory-item input { flex-grow: 1; }
+    #memoryListContainer .delete-memory-btn {
+        flex-shrink: 0;
+        background-color: #7f1d1d;
+        border: 1px solid #b91c1c;
+        color: #fecaca;
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        font-weight: bold;
+    }
+    #memoryListContainer .delete-memory-btn:hover { background-color: #991b1b !important; }
+
+    @media (max-width: 768px) {
+      :root { --sidebar-width: 220px; }
+       #sidebar { position: fixed; top: 0; bottom: 0; left: 0; box-shadow: 2px 0 8px rgba(0,0,0,0.3); height: 100vh; }
+       #sidebar.open { width: var(--sidebar-width); }
+       #main { margin-left: 0 !important; width: 100%; }
+       .sidebar-header { height: 50px; }
+       .messages, .input-container { max-width: 100%; padding: 0 10px; }
+       .input-container {
+         left: 0; /* This resets the push ONLY on mobile */
+       }
+       .input-area { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+       .input-inner { display: flex; align-items: center; gap: 8px; }
+       .input-inner form { align-items: center; }
+       #chatInput { padding: 8px 12px; min-height: 38px; }
+       .file-upload-btn-label, #sendBtn { width: 38px; height: 38px; }
+       .file-upload-btn-label .ds-icon svg { width: 18px; height: 18px; }
+       #sendBtn .ds-icon svg { width: 14px; height: 14px; }
+       .message { max-width: 95%; }
+       .message.user .media-file-block, .message.user .generic-file-block, .message.user .multi-image-block { max-width: 90%; }
+       .multi-image-preview-grid { grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); }
+       .media-preview-container, .media-preview-container img, .media-preview-container video { max-height: 200px; } 
+       .header { padding: 0 10px; height: 50px; }
+       .header button { padding: 6px; } 
+       .header-icon { font-size: 18px; width: 18px; height: 18px; }
+       .suggestion-item { font-size: 13px; padding: 6px 10px; }
+       .splash-logo { max-width: 90vw; }
+        .suggestion-prompts-line .suggestion-item {
+            max-width: calc(50% - 4px); /* All wrap to 2 per line on mobile */
+        }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <div id="sidebar">
+      <div class="sidebar-header">
+          <a href="#" class="sidebar-logo-link">
+             <svg class="sidebar-logo-icon" viewBox="0 0 24 24" role="img" xmlns="http://www.w3.org/2000/svg" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                 <path d="M19,14.7368421 C19,17.122807 16.6666667,19.2105263 12,21 C7.33333333,19.2105263 5,17.122807 5,14.7368421 C5,12.3508772 5,9.36842105 5,5.78947368 C8.13611482,4.59649123 10.4694481,4 12,4 C13.5305519,4 15.8638852,4.59649123 19,5.78947368 C19,9.36842105 19,12.3508772 19,14.7368421 Z"/>
+             </svg>
+          </a>
+          <button id="sidebarCloseBtn" title="Close History">
+             <svg class="sidebar-close-icon" viewBox="0 0 1024 1024" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M861.866667 162.133333c-17.066667-17.066667-42.666667-29.866667-68.266667-29.866666H226.133333c-25.6 0-51.2 8.533333-68.266666 29.866666S128 204.8 128 230.4v567.466667c0 25.6 8.533333 51.2 29.866667 68.266666 17.066667 17.066667 42.666667 29.866667 68.266666 29.866667h567.466667c25.6 0 51.2-8.533333 68.266667-29.866667 17.066667-17.066667 29.866667-42.666667 29.866666-68.266666V226.133333c0-25.6-8.533333-46.933333-29.866666-64zM366.933333 814.933333H226.133333c-4.266667 0-8.533333 0-12.8-4.266666-4.266667-4.266667-4.266667-8.533333-4.266666-12.8V226.133333c0-4.266667 0-8.533333 4.266666-12.8 4.266667-4.266667 8.533333-4.266667 12.8-4.266666h140.8v605.866666z m448-17.066666c0 4.266667 0 8.533333-4.266666 12.8-4.266667 4.266667-8.533333 4.266667-12.8 4.266666h-354.133334V209.066667h354.133334c4.266667 0 8.533333 0 12.8 4.266666 4.266667 4.266667 4.266667 8.533333 4.266666 12.8v571.733334z"></path>
+             </svg>
+         </button>
+      </div>
+      <div class="sidebar-nav">
+        <button id="newChatBtn" class="new-chat-btn">
+            <svg class="header-icon" viewBox="0 0 1024 1024" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M475.136 561.152v89.74336c0 20.56192 16.50688 37.23264 36.864 37.23264s36.864-16.67072 36.864-37.23264v-89.7024h89.7024c20.60288 0 37.2736-16.54784 37.2736-36.864 0-20.39808-16.67072-36.864-37.2736-36.864H548.864V397.63968A37.0688 37.0688 0 0 0 512 360.448c-20.35712 0-36.864 16.67072-36.864 37.2736v89.7024H385.4336a37.0688 37.0688 0 0 0-37.2736 36.864c0 20.35712 16.67072 36.864 37.2736 36.864h89.7024z"></path>
+                <path d="M512 118.784c-223.96928 0-405.504 181.57568-405.504 405.504 0 78.76608 22.44608 152.3712 61.35808 214.6304l-44.27776 105.6768a61.44 61.44 0 0 0 56.68864 85.1968H512c223.92832 0 405.504-181.53472 405.504-405.504 0-223.92832-181.57568-405.504-405.504-405.504z m-331.776 405.504a331.776 331.776 0 1 1 331.73504 331.776H198.656l52.59264-125.5424-11.59168-16.62976A330.09664 330.09664 0 0 1 180.224 524.288z" fill="currentColor"></path>
+            </svg>
+            <span>New Chat</span>
+        </button>
+      </div>
+     <div class="sidebar-content">
+        <div class="nav-title">Chat History</div>
+        <div id="conversationsList"></div>
+     </div>
+  </div>
+
+  <!-- Main Content -->
+  <div id="main">
+    <div class="header">
+       <div class="left-controls">
+            <button id="sidebarOpenBtn" title="Open History">
+                <svg class="header-icon" viewBox="0 0 1024 1024" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M861.866667 162.133333c-17.066667-17.066667-42.666667-29.866667-68.266667-29.866666H226.133333c-25.6 0-51.2 8.533333-68.266666 29.866666S128 204.8 128 230.4v567.466667c0 25.6 8.533333 51.2 29.866667 68.266666 17.066667 17.066667 42.666667 29.866667 68.266666 29.866667h567.466667c25.6 0 51.2-8.533333 68.266667-29.866667 17.066667-17.066667 29.866667-42.666667 29.866666-68.266666V226.133333c0-25.6-8.533333-46.933333-29.866666-64zM366.933333 814.933333H226.133333c-4.266667 0-8.533333 0-12.8-4.266666-4.266667-4.266667-4.266667-8.533333-4.266666-12.8V226.133333c0-4.266667 0-8.533333 4.266666-12.8 4.266667-4.266667 8.533333-4.266667 12.8-4.266666h140.8v605.866666z m448-17.066666c0 4.266667 0 8.533333-4.266666 12.8-4.266667 4.266667-8.533333 4.266667-12.8 4.266666h-354.133334V209.066667h354.133334c4.266667 0 8.533333 0 12.8 4.266666 4.266667 4.266667 4.266667 8.533333 4.266666 12.8v571.733334z"></path>
+                </svg>
+            </button>
+       </div>
+       <div class="right-controls">
+           <button id="settingsBtn" title="Settings"><svg class="header-icon" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"></path></svg></button>
+       </div>
+    </div>
+    <div class="messages-wrapper" id="messagesWrapper">
+        <div class="messages" id="messagesContainer"></div>
+        <div id="newChatSplash">
+            <img src="TimesLastAI.png" alt="Logo" class="splash-logo">
+            <div id="splashInputArea">
+                <!-- The input area will be moved here by JS for the splash screen -->
+            </div>
+            <div class="suggestion-prompts-container" id="suggestionPrompts">
+                <!-- Prompts will be populated by JS -->
+            </div>
+        </div>
+    </div>
+    <div class="input-area" id="inputArea">
+      <div class="input-container">
+        <div id="filePreviewsContainer"></div>
+        <div class="input-inner">
+          <form id="chatForm">
+            <label for="fileInput" class="file-upload-btn-label" title="Attach file(s)">
+              <input type="file" id="fileInput" multiple accept=".png,.jpg,.jpeg,.gif,.webp,.heic,.heif,.txt,.pdf,.doc,.docx,.xls,.xlsx,.csv,.json, .py, .js, .html, .css, .java, .c, .cpp, .php, .rb, .swift, .kt, .go, .ts, .md, .mp4, .mov, .avi, .mkv, .webm"/>
+               <div class="ds-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 14 20" fill="none"><path d="M7 20c-1.856-.002-3.635-.7-4.947-1.94C.74 16.819.003 15.137 0 13.383V4.828a4.536 4.536 0 0 1 .365-1.843 4.75 4.75 0 0 1 1.087-1.567A5.065 5.065 0 0 1 3.096.368a5.293 5.293 0 0 1 3.888 0c.616.244 1.174.6 1.643 1.05.469.45.839.982 1.088 1.567.25.586.373 1.212.364 1.843v8.555a2.837 2.837 0 0 1-.92 2.027A3.174 3.174 0 0 1 7 16.245c-.807 0-1.582-.3-2.158-.835a2.837 2.837 0 0 1-.92-2.027v-6.22a1.119 1.119 0 1 1 2.237 0v6.22a.777.777 0 0 0 .256.547.868.868 0 0 0 .585.224c.219 0 .429-.08.586-.224a.777.777 0 0 0 .256-.546V4.828A2.522 2.522 0 0 0 7.643 3.8a2.64 2.64 0 0 0-.604-.876 2.816 2.816 0 0 0-.915-.587 2.943 2.943 0 0 0-2.168 0 2.816 2.816 0 0 0-.916.587 2.64 2.64 0 0 0-.604.876 2.522 2.522 0 0 0-.198 1.028v8.555c0 1.194.501 2.339 1.394 3.183A4.906 4.906 0 0 0 7 17.885a4.906 4.906 0 0 0 3.367-1.319 4.382 4.382 0 0 0 1.395-3.183v-6.22a1.119 1.119 0 0 1 2.237 0v6.22c-.002 1.754-.74 3.436-2.052 4.677C10.635 19.3 8.856 19.998 7 20z" fill="currentColor"></path></svg></div>
+            </label>
+            <textarea id="chatInput" placeholder="Type a message or drop file(s)..." rows="1"></textarea>
+            <button type="submit" id="sendBtn" disabled> <div id="sendBtnContent"><div class="send-icon"><div class="ds-icon"><svg width="14" height="16" viewBox="0 0 14 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M7 16c-.595 0-1.077-.462-1.077-1.032V1.032C5.923.462 6.405 0 7 0s1.077.462 1.077 1.032v13.936C8.077 15.538 7.595 16 7 16z" fill="currentColor"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M.315 7.44a1.002 1.002 0 0 1 0-1.46L6.238.302a1.11 1.11 0 0 1 1.523 0c.421.403.421 1.057 0 1.46L1.838 7.44a1.11 1.11 0 0 1-1.523 0z" fill="currentColor"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M13.685 7.44a1.11 1.11 0 0 1-1.523 0L6.238 1.762a1.002 1.002 0 0 1 0-1.46 1.11 1.11 0 0 1 1.523 0l5.924 5.678c.42.403.42 1.056 0 1.46z" fill="currentColor"></path></svg></div></div></div></button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div> 
+
+  <!-- Settings Popup Modal -->
+  <div id="settingsPopup" class="settings-popup">
+      <div class="settings-popup-content">
+          <div class="settings-popup-header">
+              <h2>Settings</h2>
+              <button id="closeSettingsPopupBtn" class="close-popup-btn" title="Close settings">×</button>
+          </div>
+          <div class="settings-popup-body">
+              <div class="settings-section">
+                <h4>User Profile</h4>
+                <label for="userNameInput">Your Name:</label>
+                <input type="text" id="userNameInput" placeholder="Enter your name">
+                <p class="settings-note">This name will be used to inform the AI at the start of new chats.</p>
+              </div>
+              <div class="settings-section">
+                <h4>Memory (Experimental)</h4>
+                <div class="checkbox-group">
+                    <label for="enableMemoryToggle"><input type="checkbox" id="enableMemoryToggle"> Enable Conversational Memory</label>
+                </div>
+                <p class="settings-note">When enabled, the AI will be reminded of key facts and recent conversations.</p>
+                <button id="viewMemoriesBtn" style="margin-top: 5px;">View & Edit Memories</button>
+              </div>
+              <div class="settings-section">
+                <h4>Data Management</h4>
+                <button id="clearAllChatsBtn" class="settings-danger-btn">Clear All Chat History</button>
+                <p class="settings-note">This will permanently delete all your saved conversations and any facts the AI has remembered.</p>
+              </div>
+          </div>
+          <div class="settings-popup-footer"> <button id="saveSettingsBtn">Save Settings</button> </div>
+      </div>
+  </div>
+
+  <!-- Memory Management Modal -->
+  <div id="memoryManagementPopup" class="settings-popup">
+      <div class="settings-popup-content">
+          <div class="settings-popup-header">
+              <h2>Manage Memories</h2>
+              <button id="closeMemoryPopupBtn" class="close-popup-btn" title="Close memory manager">×</button>
+          </div>
+          <div class="settings-popup-body" id="memoryPopupBody">
+              <p class="settings-note">Edit, add, or delete the AI's long-term memories. Each line is a separate fact. Blank entries will be removed on save.</p>
+              <div id="memoryListContainer" style="max-height: 40vh; overflow-y: auto; padding-right: 10px;">
+                  <!-- Memories will be populated here by JS -->
+              </div>
+              <button id="addNewMemoryBtn" style="margin-top: 15px;">+ Add New Memory</button>
+          </div>
+          <div class="settings-popup-footer">
+              <button id="saveMemoriesBtn">Save and Close</button>
+          </div>
+      </div>
+  </div>
+
+  <script>
+    // --- Console Overrides ---
+    (function() { 
+        const originalConsole = { log: console.log.bind(console), warn: console.warn.bind(console), error: console.error.bind(console) };
+        function filterGeminiMessages(args) {
+            return Array.from(args).map(arg => {
+                if (typeof arg === 'string' && arg.toLowerCase().includes('gemini')) return "Error";
+                if (arg instanceof Error && arg.message && typeof arg.message === 'string' && arg.message.toLowerCase().includes('gemini')) return "Error";
+                return arg;
+            });
+        }
+        console.log = function() { originalConsole.log.apply(console, filterGeminiMessages(arguments)); };
+        console.warn = function() { originalConsole.warn.apply(console, filterGeminiMessages(arguments)); };
+        console.error = function() { originalConsole.error.apply(console, filterGeminiMessages(arguments)); };
+    })();
+    
+    // --- IndexedDB Helper for Local File Storage ---
+    const dbHelper = {
+        db: null,
+        dbName: 'ChatLocalFilesDB_v1',
+        storeName: 'localFiles',
+        
+        initDB() {
+            return new Promise((resolve, reject) => {
+                if (this.db) return resolve(this.db);
+                
+                try {
+                    const request = indexedDB.open(this.dbName, 1);
+                    
+                    request.onerror = (event) => {
+                        console.error("IndexedDB initialization error:", event.target.error);
+                        reject("IndexedDB error. Local files will not be saved or loaded.");
+                    };
+                    
+                    request.onsuccess = (event) => {
+                        this.db = event.target.result;
+                        resolve(this.db);
+                    };
+                    
+                    request.onupgradeneeded = (event) => {
+                        const db = event.target.result;
+                        if (!db.objectStoreNames.contains(this.storeName)) {
+                            db.createObjectStore(this.storeName);
+                        }
+                    };
+                } catch (e) {
+                     console.error("IndexedDB is not supported or is blocked in this environment.", e);
+                     reject("IndexedDB is not available.");
+                }
+            });
+        },
+        
+        saveFile(key, fileBlob) {
+            return new Promise((resolve, reject) => {
+                this.initDB().then(db => {
+                    const transaction = db.transaction([this.storeName], 'readwrite');
+                    const store = transaction.objectStore(this.storeName);
+                    const request = store.put(fileBlob, key);
+                    
+                    request.onsuccess = () => resolve();
+                    request.onerror = (event) => {
+                        console.error('[DB] Error saving file:', event.target.error);
+                        reject(event.target.error);
+                    };
+                }).catch(reject);
+            });
+        },
+        
+        getFile(key) {
+            return new Promise((resolve, reject) => {
+                this.initDB().then(db => {
+                    const transaction = db.transaction([this.storeName], 'readonly');
+                    const store = transaction.objectStore(this.storeName);
+                    const request = store.get(key);
+                    
+                    request.onsuccess = (event) => resolve(event.target.result);
+                    request.onerror = (event) => {
+                        console.error('[DB] Error getting file:', event.target.error);
+                        reject(event.target.error);
+                    };
+                }).catch(reject);
+            });
+        }
+    };
+
+    const BACKEND_URL = "https://bn9u12783t.onrender.com/chat"; 
+    const CONVERSATION_PREFIX = 'chatHistory_';
+    const USER_NAME_KEY = 'chatUserName_v1';
+    const MEMORY_ENABLED_KEY = 'chatMemoryEnabled_v1';
+    const LONG_TERM_MEMORY_KEY = 'longTermMemory_v1';
+    const MAX_TITLE_LENGTH = 35; const MAX_FILES_ALLOWED = 10; const MAX_THUMBNAILS_DISPLAY = 4; 
+
+    // DOM Elements
+    const bodyEl = document.body;
+    const mainEl = document.getElementById('main');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarOpenBtn = document.getElementById('sidebarOpenBtn');
+    const sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+    const conversationsList = document.getElementById('conversationsList');
+    const newChatBtn = document.getElementById('newChatBtn');
+    const messagesWrapper = document.getElementById('messagesWrapper');
+    const messagesContainer = document.getElementById('messagesContainer');
+    const chatForm = document.getElementById('chatForm');
+    const chatInput = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const sendBtnContent = document.getElementById('sendBtnContent');
+    const fileInput = document.getElementById('fileInput');
+    const fileUploadBtnLabel = document.querySelector('.file-upload-btn-label');
+    const filePreviewsContainer = document.getElementById('filePreviewsContainer');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsPopup = document.getElementById('settingsPopup');
+    const closeSettingsPopupBtn = document.getElementById('closeSettingsPopupBtn');
+    const userNameInput = document.getElementById('userNameInput');
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const enableMemoryToggle = document.getElementById('enableMemoryToggle');
+    const viewMemoriesBtn = document.getElementById('viewMemoriesBtn');
+    const memoryManagementPopup = document.getElementById('memoryManagementPopup');
+    const closeMemoryPopupBtn = document.getElementById('closeMemoryPopupBtn');
+    const memoryListContainer = document.getElementById('memoryListContainer');
+    const addNewMemoryBtn = document.getElementById('addNewMemoryBtn');
+    const saveMemoriesBtn = document.getElementById('saveMemoriesBtn');
+    const clearAllChatsBtn = document.getElementById('clearAllChatsBtn');
+    const inputArea = document.getElementById('inputArea');
+    const splashInputArea = document.getElementById('splashInputArea');
+    const newChatSplash = document.getElementById('newChatSplash');
+    const suggestionPromptsContainer = document.getElementById('suggestionPrompts');
+
+    // App State
+    let selectedFiles = []; 
+    let isSending = false; 
+    let currentConversationId = null; 
+    let currentHistory = [];
+
+    // --- Suggestion Prompts Data ---
+    const allSuggestionPrompts = [
+        { icon: '🐧', summary: "Why don't penguins' feet freeze?", full: "explain: Why don't penguins' feet freeze?" },
+        { icon: '🤫', summary: 'How do noise-cancelling headphones work?', full: 'explain: How do noise-cancelling headphones work?' },
+        { icon: '🧠', summary: 'How does sunscreen actually work?', full: 'explain: How does sunscreen actually work?' },
+        { icon: '🧱', summary: "What's the real story of the Trojan Horse?", full: 'explain: What is the real, historical story behind the Trojan Horse?' },
+        { icon: '🤔', summary: 'Is glass a solid or a liquid?', full: 'explain: Is glass technically a solid or a slow-moving liquid?' },
+        { icon: '📜', summary: 'Why was the Library of Alexandria famous?', full: 'explain: Why was the Library of Alexandria so famous in the ancient world?' },
+        { icon: '💡', summary: 'Why are manhole covers round?', full: 'explain: Why are manhole covers round?' },
+        { icon: '✍️', summary: 'Suggest a plot for a fantasy novel', full: 'Suggest a creative and unique plot for a new fantasy novel.' },
+        { icon: '⚡', summary: 'What causes the Northern Lights?', full: 'explain: What causes the aurora borealis, also known as the Northern Lights?'},
+        { icon: '🎬', summary: 'Give me a horror movie logline', full: 'Give me a compelling, one-sentence logline for a horror movie set on an abandoned space station.'},
+        { icon: '✈️', summary: 'Plan a 3-day trip to Tokyo', full: 'Plan a 3-day itinerary for a first-time visitor to Tokyo, focusing on a mix of modern and traditional sites.'},
+        { icon: '🎨', summary: 'Describe a painting of a futuristic city', full: 'Write a vivid description of a painting that depicts a bustling, futuristic city at sunset.'}
+    ];
+
+    function shuffleArray(array) { 
+        for (let i = array.length - 1; i > 0; i--) { 
+            const j = Math.floor(Math.random() * (i + 1)); 
+            [array[i], array[j]] = [array[j], array[i]]; 
+        } 
+        return array;
+    }
+    
+    function populateSuggestionPrompts() {
+        suggestionPromptsContainer.innerHTML = '';
+        const shuffled = shuffleArray([...allSuggestionPrompts]);
+        const promptsToDisplay = [
+            shuffled.slice(0, 2),
+            shuffled.slice(2, 5)
+        ];
+
+        promptsToDisplay.forEach(linePrompts => {
+            const lineDiv = document.createElement('div');
+            lineDiv.className = 'suggestion-prompts-line';
+            linePrompts.forEach(prompt => {
+                const item = document.createElement('a');
+                item.className = 'suggestion-item';
+                item.href = '#';
+                item.innerHTML = `<span class="suggestion-item-icon">${prompt.icon}</span> ${prompt.summary}`;
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (isSending) return;
+                    chatInput.value = prompt.full;
+                    sendMessage();
+                });
+                lineDiv.appendChild(item);
+            });
+            suggestionPromptsContainer.appendChild(lineDiv);
+        });
+    }
+    
+    // --- UI & Utility Functions ---
+    function formatBytes(bytes, decimals = 2) { 
+        if (!+bytes) return '0 Bytes'; const k = 1024; const dm = decimals < 0 ? 0 : decimals; const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k)); return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+    }
+    function truncateFilename(filename, maxLength = 17) { 
+        if (typeof filename !== 'string') return ''; if (filename.length <= maxLength) return filename;
+        const lastDotIndex = filename.lastIndexOf('.'); let namePart = filename; let extensionPart = '';
+        if (lastDotIndex > 0 && lastDotIndex > filename.length - 6) { namePart = filename.substring(0, lastDotIndex); extensionPart = filename.substring(lastDotIndex); }
+        const availableLengthForName = maxLength - extensionPart.length - 3; 
+        if (namePart.length > availableLengthForName && availableLengthForName > 0) { namePart = namePart.substring(0, availableLengthForName); return namePart + "..." + extensionPart; }
+        return filename.substring(0, maxLength - 3) + "...";
+    }
+    function getTimestamp() { return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+    function scrollChatToBottom(behavior = 'smooth') { setTimeout(() => { messagesWrapper.scrollTo({ top: messagesWrapper.scrollHeight, behavior: behavior }); }, 50); }
+    const simpleSanitize = (str) => typeof str === 'string' ? str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&quot;').replace(/'/g, '&#39;') : '';
+    function renderMarkdown(text) { 
+      if (typeof text !== 'string' || text === null || text.trim() === '') return '';
+      marked.setOptions({ gfm: true, breaks: true, pedantic: false, smartLists: true, smartypants: false, headerIds: false, mangle: false });
+      const dirtyHtml = marked.parse(text); return DOMPurify.sanitize(dirtyHtml, { USE_PROFILES: { html: true } });
+    }
+    function copyToClipboard(text, buttonElement, originalContent) {
+        navigator.clipboard.writeText(text).then(() => {
+            buttonElement.classList.add('copied');
+            buttonElement.innerHTML = '<span>Copied!</span>';
+            buttonElement.disabled = true;
+            setTimeout(() => {
+                buttonElement.innerHTML = originalContent;
+                buttonElement.disabled = false;
+                buttonElement.classList.remove('copied');
+            }, 1500);
+        }).catch(err => {
+            console.error('Failed to copy text: ', err);
+            buttonElement.classList.add('copied');
+            buttonElement.innerHTML = '<span>Error</span>';
+            buttonElement.disabled = true;
+             setTimeout(() => {
+                buttonElement.innerHTML = originalContent;
+                buttonElement.disabled = false;
+                buttonElement.classList.remove('copied');
+            }, 1500);
+        });
+    }
+
+    function addCodeCopyButtons(container) {
+        const pres = container.querySelectorAll('pre:not(.hljs-added)');
+
+        pres.forEach(pre => {
+            pre.classList.add('hljs-added');
+
+            const codeEl = pre.querySelector('code');
+            if (!codeEl) return;
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'code-block-wrapper';
+
+            pre.parentNode.insertBefore(wrapper, pre);
+            wrapper.appendChild(pre);
+
+            const langName = document.createElement('span');
+            langName.className = 'code-language-name';
+
+            const copyButton = document.createElement('button');
+            copyButton.className = 'code-copy-btn';
+            const originalButtonHTML = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M7 5C7 3.34315 8.34315 2 10 2H19C20.6569 2 22 3.34315 22 5V14C22 15.6569 20.6569 17 19 17H17V19C17 20.6569 15.6569 22 14 22H5C3.34315 22 2 20.6569 2 19V10C2 8.34315 3.34315 7 5 7H7V5ZM9 7H14C15.6569 7 17 8.34315 17 10V15H19C19.5523 15 20 14.5523 20 14V5C20 4.44772 19.5523 4 19 4H10C9.44772 4 9 4.44772 9 5V7ZM5 9C4.44772 9 4 9.44772 4 10V19C4 19.5523 4.44772 20 5 20H14C14.5523 20 15 19.5523 15 19V10C15 9.44772 14.5523 9 14 9H5Z" fill="currentColor"></path></svg><span>Copy</span>`;
+            copyButton.innerHTML = originalButtonHTML;
+            copyButton.addEventListener('click', () => {
+                const codeToCopy = codeEl.innerText || '';
+                copyToClipboard(codeToCopy, copyButton, originalButtonHTML);
+            });
+
+            hljs.highlightElement(codeEl);
+
+            const languageClass = Array.from(codeEl.classList).find(cls => cls.startsWith('language-'));
+            langName.textContent = languageClass ? languageClass.replace('language-', '') : 'text';
+
+            wrapper.appendChild(langName);
+            wrapper.appendChild(copyButton);
+        });
+    }
+
+    // --- UI State Management ---
+    function setSendingState(sending) { 
+        isSending = sending; 
+        chatInput.disabled = sending;
+        fileInput.disabled = sending || selectedFiles.length >= MAX_FILES_ALLOWED;
+        fileUploadBtnLabel.style.cursor = (sending || selectedFiles.length >= MAX_FILES_ALLOWED) ? 'default' : 'pointer';
+        fileUploadBtnLabel.style.opacity = (sending || selectedFiles.length >= MAX_FILES_ALLOWED) ? 0.6 : 1;
+        document.querySelectorAll('.file-preview-item .file-remove-btn').forEach(btn => btn.disabled = sending);
+        
+        const hasContent = chatInput.value.trim() !== '' || selectedFiles.length > 0;
+        sendBtn.disabled = sending || !hasContent;
+        if (sending) {
+            sendBtn.classList.add('loading');
+            sendBtnContent.innerHTML = '<div class="spinner"></div>';
+        } else { 
+            sendBtn.classList.remove('loading');
+            sendBtnContent.innerHTML = `<div class="send-icon"><div class="ds-icon"><svg width="14" height="16" viewBox="0 0 14 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M7 16c-.595 0-1.077-.462-1.077-1.032V1.032C5.923.462 6.405 0 7 0s1.077.462 1.077 1.032v13.936C8.077 15.538 7.595 16 7 16z" fill="currentColor"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M.315 7.44a1.002 1.002 0 0 1 0-1.46L6.238.302a1.11 1.11 0 0 1 1.523 0c.421.403.421 1.057 0 1.46L1.838 7.44a1.11 1.11 0 0 1-1.523 0z" fill="currentColor"></path><path fill-rule="evenodd" clip-rule="evenodd" d="M13.685 7.44a1.11 1.11 0 0 1-1.523 0L6.238 1.762a1.002 1.002 0 0 1 0-1.46 1.11 1.11 0 0 1 1.523 0l5.924 5.678c.42.403.42 1.056 0 1.46z" fill="currentColor"></path></svg></div></div>`;
+        }
+    }
+
+    function adjustTextareaHeight() { 
+        chatInput.style.height = 'auto'; const maxHeight = 150; const scrollHeight = chatInput.scrollHeight;
+        const newHeight = Math.min(scrollHeight, maxHeight); chatInput.style.height = newHeight + 'px';
+        chatInput.style.overflowY = (scrollHeight > maxHeight) ? 'auto' : 'hidden';
+    }
+
+    function updateSendButtonState() { 
+         const hasContent = chatInput.value.trim() !== '' || selectedFiles.length > 0;
+         const canSend = !isSending && hasContent;
+         sendBtn.disabled = !canSend;
+         
+         const canAddFiles = !isSending && selectedFiles.length < MAX_FILES_ALLOWED;
+         fileInput.disabled = !canAddFiles;
+         fileUploadBtnLabel.style.cursor = canAddFiles ? 'pointer' : 'default';
+         fileUploadBtnLabel.style.opacity = canAddFiles ? 1 : 0.6;
+    }
+    
+    // --- Message Rendering ---
+    function createMessageElement(role, textContent, fileInfos = [], timestamp = null, animate = true) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message', role);
+        if (role === 'system') { messageDiv.style.cssText = 'font-style: italic; font-size: 0.9em; color: var(--text-muted); align-self: center; max-width: 80%; text-align: center;';}
+        if (animate) { messageDiv.style.opacity = '0'; messageDiv.style.transform = 'translateY(10px)'; } else { messageDiv.style.opacity = '1'; messageDiv.style.transform = 'translateY(0)'; }
+        const messageContentDiv = document.createElement('div');
+        messageContentDiv.className = 'message-content';
+        const displayTimestamp = timestamp || getTimestamp();
+
+        const setMediaSource = (mediaElement, fileInfo) => {
+            (async () => {
+                let sourceUrl = null;
+                let isBlob = false;
+                
+                if (fileInfo.fileObject) {
+                    sourceUrl = URL.createObjectURL(fileInfo.fileObject);
+                    isBlob = true;
+                } else if (fileInfo.uri) {
+                    try {
+                        const localFile = await dbHelper.getFile(fileInfo.uri);
+                        if (localFile) {
+                            sourceUrl = URL.createObjectURL(localFile);
+                            isBlob = true;
+                        } else {
+                           console.warn('[DB] File NOT found in DB for key:', fileInfo.uri);
+                        }
+                    } catch (err) {
+                        console.error(`[DB] Error fetching file ${fileInfo.uri} from IndexedDB`, err);
+                    }
+                }
+                
+                if (sourceUrl) {
+                    mediaElement.src = sourceUrl;
+                    if (isBlob) {
+                        const revoke = () => URL.revokeObjectURL(sourceUrl);
+                        mediaElement.addEventListener('load', revoke, { once: true });
+                        mediaElement.addEventListener('error', revoke, { once: true });
+                        if (mediaElement.tagName === 'VIDEO') {
+                            const sourceTag = mediaElement.querySelector('source');
+                            if (sourceTag) sourceTag.src = sourceUrl;
+                            mediaElement.addEventListener('ended', revoke, { once: true });
+                        }
+                    }
+                } else {
+                    const container = mediaElement.closest('.media-preview-container');
+                    if (container) {
+                        container.innerHTML = '';
+                        container.classList.add('missing-media');
+                        container.setAttribute('data-missing-filename', simpleSanitize(fileInfo.name));
+                    }
+                }
+            })();
+        };
+
+        if (role === 'user') {
+            const fileBlockContainer = document.createElement('div');
+            fileBlockContainer.className = 'file-block-container';
+            let hasAnyFileBlock = false;
+
+            const imageFileInfos = fileInfos.filter(f => f.type && f.type.startsWith('image/'));
+            const otherFileInfos = fileInfos.filter(f => !f.type || !f.type.startsWith('image/'));
+
+            if (imageFileInfos.length > 1) {
+                hasAnyFileBlock = true;
+                const container = document.createElement('div'); container.className = 'file-block multi-image-block';
+                const grid = document.createElement('div'); grid.className = 'multi-image-preview-grid';
+                imageFileInfos.slice(0, MAX_THUMBNAILS_DISPLAY).forEach(info => {
+                    const link = document.createElement('a'); link.className = 'img-thumb-link'; link.title = simpleSanitize(info.name);
+                    const img = document.createElement('img'); img.alt = simpleSanitize(info.name);
+                    setMediaSource(img, info);
+                    link.appendChild(img); grid.appendChild(link);
+                });
+                container.appendChild(grid);
+                const caption = document.createElement('div'); caption.className = 'multi-image-caption-details';
+                const nameDiv = document.createElement('div'); nameDiv.className = 'file-name';
+                nameDiv.textContent = `${imageFileInfos.length} Images${imageFileInfos.length > MAX_THUMBNAILS_DISPLAY ? ` (+${imageFileInfos.length - MAX_THUMBNAILS_DISPLAY} more)` : ''}`;
+                caption.appendChild(nameDiv); container.appendChild(caption); fileBlockContainer.appendChild(container);
+            } 
+            else if (imageFileInfos.length === 1) {
+                hasAnyFileBlock = true;
+                const info = imageFileInfos[0];
+                const container = document.createElement('div'); container.className = 'file-block media-file-block';
+                const name = simpleSanitize(info.name); const truncatedName = truncateFilename(name);
+                const size = (typeof info.size === 'number' && info.size !== '?') ? formatBytes(info.size) : (info.size === '?' ? '' : '');
+                const type = simpleSanitize(info.type.split('/')[1]?.toUpperCase() || 'IMAGE');
+                container.innerHTML = `<div class="media-preview-container"><img alt="${name}"></div><div class="media-caption"><div class="file-name" title="${name}">${truncatedName}</div><div class="file-info">${type} ${size}</div></div>`;
+                const img = container.querySelector('img');
+                setMediaSource(img, info);
+                fileBlockContainer.appendChild(container);
+            }
+
+            otherFileInfos.forEach(info => {
+                hasAnyFileBlock = true;
+                const container = document.createElement('div');
+                const name = simpleSanitize(info.name); const truncatedName = truncateFilename(name);
+                const size = (typeof info.size === 'number' && info.size !== '?') ? formatBytes(info.size) : (info.size === '?' ? '' : '');
+
+                if (info.type && info.type.startsWith('video/')) {
+                    container.className = 'file-block media-file-block';
+                    const mimeType = simpleSanitize(info.type);
+                    const type = simpleSanitize(info.type.split('/')[1]?.toUpperCase() || 'VIDEO');
+                    container.innerHTML = `<div class="media-preview-container"><video controls><source type="${mimeType}"></video></div><div class="media-caption"><div class="file-name" title="${name}">${truncatedName}</div><div class="file-info">${type} ${size}</div></div>`;
+                    const video = container.querySelector('video');
+                    setMediaSource(video, info);
+                } else {
+                    container.className = 'file-block generic-file-block';
+                    const type = (info.type && info.type !== 'unknown') ? info.type.split('/')[1]?.toUpperCase() : 'FILE';
+                    const fileInfoText = `${type} ${size}`.trim();
+                    container.innerHTML = `<div class="file-icon"><svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 9C7 6.79086 8.79086 5 11 5L18.6383 5C19.1906 5 19.6383 5.44772 19.6383 6V6.92308C19.6383 9.13222 21.4292 10.9231 23.6383 10.9231H24C24.5523 10.9231 25 11.3708 25 11.9231V23C25 25.2091 23.2091 27 21 27H11C8.79086 27 7 25.2091 7 23V9Z" fill="#F8CA27"></path><g><path d="M19.6602 6.92458V5.84766L24.4126 10.9246H23.6602C21.451 10.9246 19.6602 9.13372 19.6602 6.92458Z" fill="#F8EDC7"></path></g></svg></div><div class="file-details"><div class="file-name" title="${name}">${truncatedName}</div><div class="file-info">${simpleSanitize(fileInfoText)}</div></div>`;
+                }
+                fileBlockContainer.appendChild(container);
+            });
+
+            if (hasAnyFileBlock) messageContentDiv.appendChild(fileBlockContainer);
+
+            if (textContent && textContent.trim() !== '') {
+                const bubble = document.createElement('div'); bubble.className = 'message-bubble';
+                let textToDisplay;
+                if (textContent.startsWith('*') && textContent.endsWith('*') && textContent.length > 2) {
+                    let innerContent = textContent.substring(1, textContent.length - 1);
+                    innerContent = simpleSanitize(innerContent).replace(/\r\n|\r|\n/g, '<br>');
+                    textToDisplay = `<em>${innerContent}</em>`;
+                } else {
+                    textToDisplay = simpleSanitize(textContent).replace(/\r\n|\r|\n/g, '<br>');
+                }
+                bubble.innerHTML = textToDisplay;
+                messageContentDiv.appendChild(bubble);
+            }
+        } else if (role === 'assistant') {
+            if (textContent && textContent.trim() !== '') {
+                messageContentDiv.innerHTML = renderMarkdown(textContent);
+                addCodeCopyButtons(messageContentDiv);
+            }
+        } else if (role === 'error') {
+            const strong = document.createElement('strong'); strong.textContent = "Error: "; messageContentDiv.appendChild(strong);
+            messageContentDiv.appendChild(document.createTextNode(simpleSanitize(textContent.toLowerCase().startsWith('error:') ? textContent.substring(6).trim() : textContent)));
+        } else if (role === 'system') {
+            messageContentDiv.innerHTML = simpleSanitize(textContent);
+        }
+
+        messageDiv.appendChild(messageContentDiv);
+        
+        let footerDiv;
+        if (role === 'user' || role === 'assistant' || role === 'error') {
+            footerDiv = document.createElement('div'); footerDiv.className = 'message-footer';
+            const copyBtn = document.createElement('button'); copyBtn.className = 'copy-btn'; copyBtn.title = 'Copy message text';
+            const copyBtnSVG = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M7 5C7 3.34315 8.34315 2 10 2H19C20.6569 2 22 3.34315 22 5V14C22 15.6569 20.6569 17 19 17H17V19C17 20.6569 15.6569 22 14 22H5C3.34315 22 2 20.6569 2 19V10C2 8.34315 3.34315 7 5 7H7V5ZM9 7H14C15.6569 7 17 8.34315 17 10V15H19C19.5523 15 20 14.5523 20 14V5C20 4.44772 19.5523 4 19 4H10C9.44772 4 9 4.44772 9 5V7ZM5 9C4.44772 9 4 9.44772 4 10V19C4 19.5523 4.44772 20 5 20H14C14.5523 20 15 19.5523 15 19V10C15 9.44772 14.5523 9 14 9H5Z" fill="currentColor"></path></svg>`;
+            copyBtn.innerHTML = copyBtnSVG;
+            copyBtn.addEventListener('click', () => {
+                const textToCopy = messageContentDiv.innerText || messageContentDiv.textContent;
+                copyToClipboard(textToCopy, copyBtn, copyBtnSVG);
+            });
+            
+            const tsDiv = document.createElement('div'); tsDiv.className = 'timestamp'; tsDiv.textContent = displayTimestamp;
+            footerDiv.appendChild(copyBtn);
+            footerDiv.appendChild(tsDiv);
+            messageDiv.appendChild(footerDiv);
+        }
+
+        messagesContainer.appendChild(messageDiv);
+        if (animate) { requestAnimationFrame(() => { requestAnimationFrame(() => { messageDiv.style.opacity = '1'; messageDiv.style.transform = 'translateY(0)'; }); }); scrollChatToBottom(); }
+        return { role, text: textContent || "", fileInfos: fileInfos || [], timestamp: displayTimestamp, messageElement: messageDiv, contentElement: messageContentDiv, footerElement: footerDiv };
+    }
+
+    function showTypingIndicator() { 
+        if (messagesContainer.querySelector('.typing-indicator')) return;
+        const typingDiv = document.createElement('div'); typingDiv.className = 'message assistant typing-indicator';
+        typingDiv.innerHTML = `<div class="typing"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div><div class="message-footer"><div class="timestamp">${getTimestamp()}</div></div>`;
+        messagesContainer.appendChild(typingDiv); scrollChatToBottom();
+    }
+    function removeTypingIndicator() { const typingDiv = messagesContainer.querySelector('.typing-indicator'); if (typingDiv) typingDiv.remove(); }
+
+    // --- File Handling ---
+    fileInput.addEventListener('change', (e) => { 
+        const files = Array.from(e.target.files); if (!files.length) return;
+        const remainingSlots = MAX_FILES_ALLOWED - selectedFiles.length;
+        const filesToAdd = files.slice(0, remainingSlots);
+        if (files.length > filesToAdd.length) alert(`Max ${MAX_FILES_ALLOWED} files. ${filesToAdd.length} added.`);
+        filesToAdd.forEach(file => { if (!selectedFiles.some(sf => sf.name === file.name && sf.size === file.size)) selectedFiles.push(file); });
+        renderFilePreviews(); updateSendButtonState(); adjustTextareaHeight(); fileInput.value = ''; 
+    });
+    function renderFilePreviews() { 
+        filePreviewsContainer.innerHTML = ''; if (selectedFiles.length === 0) { filePreviewsContainer.style.display = 'none'; return; }
+        selectedFiles.forEach((file, index) => {
+            const item = document.createElement('div'); item.className = 'file-preview-item'; const name = truncateFilename(file.name);
+            item.innerHTML = `<div class="file-preview-details"><div class="file-preview-icon"><svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 9C7 6.79086 8.79086 5 11 5L18.6383 5C19.1906 5 19.6383 5.44772 19.6383 6V6.92308C19.6383 9.13222 21.4292 10.9231 23.6383 10.9231H24C24.5523 10.9231 25 11.3708 25 11.9231V23C25 25.2091 23.2091 27 21 27H11C8.79086 27 7 25.2091 7 23V9Z" fill="#F8CA27"></path><g><path d="M19.6602 6.92458V5.84766L24.4126 10.9246H23.6602C21.451 10.9246 19.6602 9.13372 19.6602 6.92458Z" fill="#F8EDC7"></path></g></svg></div><div class="file-preview-text"><div class="file-preview-name" title="${file.name}">${name}</div><div class="file-preview-info">${file.type.split('/')[1]?.toUpperCase()||'FILE'} ${formatBytes(file.size)}</div></div></div><button class="file-remove-btn" data-index="${index}" title="Remove file"><div class="icon"><svg viewBox="0 0 8 8" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7.45.549a.777.777 0 0 1 0 1.098L1.648 7.451A.776.776 0 1 1 .55 6.353L6.353.55a.776.776 0 0 1 1.098 0z" fill="currentColor"/><path d="M.55.548a.776.776 0 0 1 1.097 0l5.804 5.805A.777.777 0 0 1 6.353 7.45L.549 1.646a.777.777 0 0 1 0-1.098z" fill="currentColor"/></svg></div></button>`;
+            item.querySelector('.file-remove-btn').addEventListener('click', (e) => { removeSelectedFile(parseInt(e.currentTarget.dataset.index, 10)); });
+            filePreviewsContainer.appendChild(item);
+        });
+        filePreviewsContainer.style.display = 'flex';
+    }
+    function removeSelectedFile(index) { 
+      if (index >= 0 && index < selectedFiles.length) { selectedFiles.splice(index, 1); renderFilePreviews(); updateSendButtonState(); adjustTextareaHeight(); }
+    }
+    function clearAllSelectedFiles() { 
+        selectedFiles = []; renderFilePreviews(); updateSendButtonState(); adjustTextareaHeight(); fileInput.value = ''; 
+    }
+
+    // --- Core Chat Logic ---
+    function generateConversationId() { return `${CONVERSATION_PREFIX}${Date.now()}`; }
+    function getConversationTitle(messagesForTitle) { 
+        if (!messagesForTitle || messagesForTitle.length === 0) return "New Chat"; 
+        const firstMeaningfulMessage = messagesForTitle.find(m => {
+            const text = m.text || '';
+            return !isSystemPrompt(text) && ((m.role === 'user' && text.trim()) || (m.fileInfos && m.fileInfos.length > 0 && m.fileInfos[0].name) || (m.role === 'assistant' && text.trim()));
+        });
+        let titleSource = "Chat";
+        if (firstMeaningfulMessage) {
+            titleSource = firstMeaningfulMessage.text || (firstMeaningfulMessage.fileInfos && firstMeaningfulMessage.fileInfos.length > 0 ? firstMeaningfulMessage.fileInfos[0].name : "Chat");
+        }
+        let title = titleSource.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+        return title.length > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) + '...' : title;
+    }
+
+    function saveCurrentConversation() { 
+         if (!currentHistory || currentHistory.length < 2) return; // Don't save empty/system-only chats
+         const historyToStore = currentHistory.map(h => (h && h.role && h.parts && Array.isArray(h.parts) ? { role: h.role, parts: h.parts } : null)).filter(item => item !== null);
+         if (historyToStore.length < 2) return; 
+         const titleData = historyToStore.map(item => {
+             let text = ''; let fileInfos = [];
+             item.parts.forEach(p => { if (p.text) text = p.text; if (p.file_data) fileInfos.push({ name: p.file_data.file_uri?.split('/').pop() || 'file', type: p.file_data.mime_type }); });
+             let displayRole = item.role === 'user' ? 'user' : 'assistant'; 
+             if (text === "Error" || (text && text.toLowerCase().startsWith('error:'))) displayRole = 'error';
+             return { role: displayRole, text: text, fileInfos: fileInfos };
+         });
+         const title = getConversationTitle(titleData); const date = Date.now();
+         const currentId = currentConversationId || generateConversationId();
+         try { localStorage.setItem(currentId, JSON.stringify({ id: currentId, title, date, history: historyToStore })); currentConversationId = currentId; loadConversationsList(); highlightCurrentConversation(currentId); } 
+         catch (e) { console.error("Error saving conversation:", e); }
+     }
+
+    function isSystemPrompt(text) {
+        if (!text) return false;
+        const lowerText = text.toLowerCase();
+        return lowerText.startsWith("system prompt (unrelated to your built in one, this is for the general timeslastai.github.io site you're on) (instructions for ai):") ||
+               lowerText.startsWith("understood. i will proceed with these instructions");
+    }
+
+    function getLastConversationHistory() {
+        try {
+            const keys = Object.keys(localStorage).filter(k => k.startsWith(CONVERSATION_PREFIX));
+            if (keys.length < 1) return null;
+            const sortedChats = keys.map(key => {
+                try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+            }).filter(d => d && d.date).sort((a, b) => b.date - a.date);
+            const recentChats = sortedChats.slice(0, 5); 
+            const contextMessages = [];
+            for (const chat of recentChats) {
+                if (chat && chat.history && chat.history.length > 0) {
+                    const filteredHistory = chat.history.filter(msg => !isSystemPrompt(msg.parts.map(p => p.text || '').join('')));
+                    if (filteredHistory.length > 0) {
+                        contextMessages.push({ title: chat.title, messages: filteredHistory.slice(-2) });
+                    }
+                }
+            }
+            return contextMessages.reverse();
+        } catch (e) {
+            console.error("Error getting last conversation history:", e);
+            return null;
+        }
+    }
+
+    function loadConversationsList() { 
+        conversationsList.innerHTML = ''; const keys = Object.keys(localStorage); const chatKeys = keys.filter(k => k.startsWith(CONVERSATION_PREFIX));
+        const sortedChats = chatKeys.map(key => { try { const d = JSON.parse(localStorage.getItem(key)); return d ? { key: key, title: d.title || "Untitled", date: d.date || 0 } : null; } catch (e) { return null; } }).filter(i => i !== null).sort((a, b) => b.date - a.date);
+        if (sortedChats.length === 0) { conversationsList.innerHTML = '<div style="padding: 15px; color: var(--text-muted); font-size: 13px; text-align: center;">No past conversations.</div>'; return; }
+        sortedChats.forEach(chat => {
+            const itemDiv = document.createElement('div'); itemDiv.className = 'conversation-item'; itemDiv.dataset.id = chat.key;
+            const titleSpan = document.createElement('span'); titleSpan.className = 'conv-title'; titleSpan.textContent = chat.title; titleSpan.title = chat.title;
+            const dateSpan = document.createElement('span'); dateSpan.className = 'conv-date'; dateSpan.textContent = new Date(chat.date).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+            itemDiv.appendChild(titleSpan); itemDiv.appendChild(dateSpan);
+            itemDiv.addEventListener('click', () => { if (!isSending) { loadConversation(chat.key); if (window.innerWidth <= 768) { sidebar.classList.remove('open'); bodyEl.classList.remove('sidebar-open'); } } });
+            conversationsList.appendChild(itemDiv);
+        });
+         highlightCurrentConversation(currentConversationId);
+    }
+
+    async function loadConversation(conversationId) { 
+        if (!conversationId || !localStorage.getItem(conversationId)) { await startNewConversation(); return; }
+        
+        mainEl.classList.remove('splash-visible');
+        mainEl.classList.add('chat-active');
+        mainEl.appendChild(inputArea);
+        
+        try {
+            const storedData = JSON.parse(localStorage.getItem(conversationId));
+            if (storedData && storedData.history && Array.isArray(storedData.history)) {
+                currentConversationId = conversationId; messagesContainer.innerHTML = ''; currentHistory = []; clearAllSelectedFiles();
+                
+                for (const savedItem of storedData.history) {
+                    if (!savedItem || !savedItem.role || !savedItem.parts || !Array.isArray(savedItem.parts)) continue;
+                    currentHistory.push({ role: savedItem.role, parts: savedItem.parts });
+                    
+                    let textForDisplay = ''; let fileInfosForDisplay = []; 
+                    savedItem.parts.forEach(part => { 
+                        if (part.text !== undefined) textForDisplay = part.text;
+                        else if (part.file_data && part.file_data.file_uri) {
+                            fileInfosForDisplay.push({ 
+                                name: part.file_data.file_uri.split('/').pop() || 'Loaded File', 
+                                type: part.file_data.mime_type || 'unknown', 
+                                size: '?', uri: part.file_data.file_uri, fileObject: null
+                            });
+                        }
+                    });
+
+                    if (!isSystemPrompt(savedItem.parts.map(p => p.text || '').join(''))) {
+                        let displayRole = (savedItem.role === 'user') ? 'user' : 'assistant';
+                        if (textForDisplay && typeof textForDisplay === 'string' && textForDisplay.toLowerCase().includes('gemini') && textForDisplay.toLowerCase().includes('error')) {
+                            textForDisplay = "Error"; displayRole = 'error';
+                        }
+                        if (textForDisplay === "Error" || (savedItem.role === 'model' && textForDisplay?.toLowerCase().startsWith('error:'))) displayRole = 'error';
+                        let textToRenderOnLoad = textForDisplay;
+                        if (savedItem.role === 'model' && textToRenderOnLoad) {
+                            textToRenderOnLoad = textToRenderOnLoad.replace(/\[memory\]([\s\S]*?)\[\/memory\]/gi, '').trim();
+                        }
+                        const messageElements = createMessageElement(displayRole, textToRenderOnLoad, fileInfosForDisplay, savedItem.timestamp || getTimestamp(), false);
+                        const originalText = savedItem.parts.map(p => p.text || '').join('');
+                        if (localStorage.getItem(MEMORY_ENABLED_KEY) === 'true' && /\[memory\]/i.test(originalText)) {
+                            const badge = document.createElement('div'); badge.className = 'memory-saved-badge';
+                            badge.innerHTML = `<button type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.58835 14.8823L9.90621 14.6188C10.2934 14.5413 10.649 14.351 10.9282 14.0718L13.9991 11.0009C14.5518 10.4482 14.5516 9.55204 13.9986 8.99962C13.446 8.4475 12.5504 8.44782 11.9982 9.00033L8.92793 12.0719C8.64889 12.351 8.45869 12.7065 8.38129 13.0936L8.11767 14.4117C8.06169 14.6915 8.30846 14.9383 8.58835 14.8823Z"></path><path d="M3 4C3 2.89543 3.89543 2 5 2V14C3.89543 14 3 13.1046 3 12V4Z"></path><path d="M6.97543 14H6V2H12C12.5523 2 13 2.44772 13 3V7.38574C12.3299 7.38522 11.6597 7.64065 11.1486 8.15198L8.07841 11.2235C7.63195 11.6702 7.32763 12.239 7.20378 12.8582L6.97543 14Z"></path></svg>Saved Memory</button>`;
+                            if (messageElements && messageElements.messageElement && messageElements.contentElement) {
+                                messageElements.messageElement.insertBefore(badge, messageElements.contentElement);
+                            }
+                        }
+                    }
+                }
+                highlightCurrentConversation(conversationId); scrollChatToBottom('instant');
+                updateSendButtonState(); chatInput.value = ''; adjustTextareaHeight();
+            } else await startNewConversation();
+        } catch (e) { console.error(`Error loading conversation ${conversationId}:`, e); await startNewConversation(); }
+    }
+
+    async function startNewConversation() { 
+        if (mainEl.classList.contains('chat-active') && currentHistory.length > 1) saveCurrentConversation(); 
+        
+        currentConversationId = null; currentHistory = []; messagesContainer.innerHTML = ''; clearAllSelectedFiles();
+        chatInput.value = ''; adjustTextareaHeight(); updateSendButtonState(); highlightCurrentConversation(null);
+
+        mainEl.classList.add('splash-visible');
+        mainEl.classList.remove('chat-active');
+        splashInputArea.appendChild(inputArea); // Move input area into the splash view
+        populateSuggestionPrompts();
+        
+        const memoryEnabled = localStorage.getItem(MEMORY_ENABLED_KEY) === 'true';
+        let systemPromptParts = [];
+        let finalSystemPrompt = "SYSTEM PROMPT (unrelated to your built in one, this is for the general timeslastai.github.io site you're on) (Instructions for AI):\n\n";
+        const savedName = localStorage.getItem(USER_NAME_KEY);
+        if (savedName) systemPromptParts.push(`The user's name is ${savedName}. Refer to them by this name when appropriate.`);
+        if (memoryEnabled) {
+            systemPromptParts.push("You have a memory function. To remember a key detail, use the command: `[memory] The user's favorite color is blue. [/memory]`. Use this ONLY for significant, long-term facts. The user will not see the `[memory]` command.");
+            const longTermMemory = JSON.parse(localStorage.getItem(LONG_TERM_MEMORY_KEY) || '[]');
+            if (longTermMemory.length > 0) systemPromptParts.push("SAVED MEMORIES (Refer to these facts about the user):\n- " + longTermMemory.join('\n- '));
+            const lastConvHistory = getLastConversationHistory();
+            if (lastConvHistory && lastConvHistory.length > 0) {
+                const contextHeader = "\n\nPREVIOUS CONVERSATION CONTEXT (For short-term memory):";
+                const formattedHistory = lastConvHistory.map(entry => {
+                    const messagesText = entry.messages.map(msg => {
+                        const role = msg.role === 'user' ? 'Old User' : 'Old Assistant';
+                        const text = msg.parts.map(p => p.text || (p.file_data ? `[file: ${p.file_data.file_uri.split('/').pop()}]` : '')).join(' ');
+                        return `${role}: ${text}`;
+                    }).join('\n');
+                    return `\n--- From chat "${entry.title}" ---\n${messagesText}`;
+                }).join('');
+                systemPromptParts.push(`${contextHeader}${formattedHistory}`);
+            }
+        }
+        if (systemPromptParts.length > 0) {
+            const userMessage = finalSystemPrompt + systemPromptParts.join('\n\n');
+            const aiResponse = "Understood. I will proceed with these instructions.";
+            currentHistory.push({ role: 'user', parts: [{ text: userMessage }] });
+            currentHistory.push({ role: 'model', parts: [{ text: aiResponse }] });
+        }
+    }
+
+    function highlightCurrentConversation(conversationId) { 
+        document.querySelectorAll('.conversation-item').forEach(item => { item.classList.toggle('active', item.dataset.id === conversationId); }); 
+    }
+
+    async function sendMessage() {
+        if (isSending) return;
+
+        const rawUserInput = chatInput.value;
+        const filesToProcess = [...selectedFiles];
+
+        if (rawUserInput.trim() === '' && filesToProcess.length === 0) return;
+
+        // Transition from splash to chat view
+        if (mainEl.classList.contains('splash-visible')) {
+            mainEl.classList.remove('splash-visible');
+            mainEl.classList.add('chat-active');
+            // Move input area back to its original container at the bottom
+            mainEl.appendChild(inputArea);
+        }
+
+        if (!BACKEND_URL || BACKEND_URL.includes("yourusername.pythonanywhere.com")) {
+            createMessageElement('error', "Frontend not configured: BACKEND_URL needs to be set.", [], null, false);
+            return;
+        }
+
+        setSendingState(true);
+        const fileInfosForMessage = filesToProcess.map(f => ({ name: f.name, size: f.size, type: f.type, fileObject: f }));
+        createMessageElement('user', rawUserInput, fileInfosForMessage, null, true);
+
+        const formData = new FormData();
+        if (rawUserInput) formData.append('prompt', rawUserInput);
+        filesToProcess.forEach(file => formData.append('files[]', file, file.name));
+        
+        formData.append('history', JSON.stringify(currentHistory.filter(h => h && h.role && h.parts)));
+        if (currentConversationId) formData.append('conversation_id', currentConversationId);
+
+        chatInput.value = '';
+        adjustTextareaHeight();
+        clearAllSelectedFiles();
+        showTypingIndicator();
+
+        const userMessageHistoryEntry = { role: 'user', parts: [] };
+        if (rawUserInput) userMessageHistoryEntry.parts.push({ text: rawUserInput });
+
+        let accumulatedText = "";
+        let serverUploadedFileDetails = [];
+        let streamError = null;
+        let assistantMessageWrapperDiv, assistantContentDiv, assistantFooterDiv;
+        let memoryBadgeAdded = false;
+
+        try {
+            const response = await fetch(BACKEND_URL, { method: 'POST', body: formData });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: `Request failed: ${response.statusText}` }));
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+            if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+                throw new Error('Invalid response type. Expected text/event-stream.');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                let eolIndex;
+                while ((eolIndex = buffer.indexOf('\n\n')) !== -1) {
+                    const message = buffer.substring(0, eolIndex);
+                    buffer = buffer.substring(eolIndex + 2);
+                    let eventType = 'message';
+                    let eventDataJson = '';
+                    message.split('\n').forEach(line => {
+                        if (line.startsWith('event:')) eventType = line.substring('event:'.length).trim();
+                        else if (line.startsWith('data:')) eventDataJson = line.substring('data:'.length).trim();
+                    });
+
+                    if (eventDataJson) {
+                        const parsedData = JSON.parse(eventDataJson);
+                        if (eventType === 'content_chunk' && parsedData.text_chunk) {
+                            if (!assistantMessageWrapperDiv) {
+                                removeTypingIndicator();
+                                const result = createMessageElement('assistant', '', [], getTimestamp(), true);
+                                assistantMessageWrapperDiv = result.messageElement;
+                                assistantContentDiv = result.contentElement;
+                                assistantFooterDiv = result.footerElement;
+                            }
+                            accumulatedText += parsedData.text_chunk;
+                            let textToRender = accumulatedText;
+                            const memoryRegex = /\[memory\]([\s\S]*?)\[\/memory\]/gi;
+                            if (localStorage.getItem(MEMORY_ENABLED_KEY) === 'true' && textToRender.includes('[memory]')) {
+                                if (!memoryBadgeAdded) {
+                                    const badge = document.createElement('div'); badge.className = 'memory-saved-badge';
+                                    badge.innerHTML = `<button type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.58835 14.8823L9.90621 14.6188C10.2934 14.5413 10.649 14.351 10.9282 14.0718L13.9991 11.0009C14.5518 10.4482 14.5516 9.55204 13.9986 8.99962C13.446 8.4475 12.5504 8.44782 11.9982 9.00033L8.92793 12.0719C8.64889 12.351 8.45869 12.7065 8.38129 13.0936L8.11767 14.4117C8.06169 14.6915 8.30846 14.9383 8.58835 14.8823Z"></path><path d="M3 4C3 2.89543 3.89543 2 5 2V14C3.89543 14 3 13.1046 3 12V4Z"></path><path d="M6.97543 14H6V2H12C12.5523 2 13 2.44772 13 3V7.38574C12.3299 7.38522 11.6597 7.64065 11.1486 8.15198L8.07841 11.2235C7.63195 11.6702 7.32763 12.239 7.20378 12.8582L6.97543 14Z"></path></svg>Saved Memory</button>`;
+                                    assistantMessageWrapperDiv.insertBefore(badge, assistantContentDiv); memoryBadgeAdded = true;
+                                }
+                                textToRender = textToRender.replace(memoryRegex, '').trim();
+                            }
+                            assistantContentDiv.innerHTML = renderMarkdown(textToRender);
+                            addCodeCopyButtons(assistantContentDiv);
+                            assistantFooterDiv.querySelector('.timestamp').textContent = getTimestamp();
+                            scrollChatToBottom('smooth');
+                        } else if (eventType === 'stream_end') {
+                            serverUploadedFileDetails = parsedData.uploaded_file_details || [];
+                        } else if (eventType === 'stream_error') {
+                            streamError = parsedData.error || 'Unknown stream error.';
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error in sendMessage:", error);
+            streamError = error.message;
+        } finally {
+            removeTypingIndicator();
+            if (streamError) {
+                let errorToDisplay = (typeof streamError === 'string' && streamError.toLowerCase().includes('gemini')) ? "Error" : streamError;
+                createMessageElement('error', errorToDisplay);
+                if (userMessageHistoryEntry.parts.length > 0 || filesToProcess.length > 0) currentHistory.push(userMessageHistoryEntry);
+                currentHistory.push({ role: 'model', parts: [{ text: errorToDisplay }] });
+                saveCurrentConversation();
+                setSendingState(false);
+                return;
+            }
+            if (serverUploadedFileDetails.length > 0 && filesToProcess.length > 0) {
+                serverUploadedFileDetails.forEach(async (detail, index) => {
+                    const originalFile = filesToProcess[index];
+                    if (originalFile && detail.uri) {
+                        try { await dbHelper.saveFile(detail.uri, originalFile); } 
+                        catch (dbErr) { console.error(`[DB] Failed to save file ${detail.uri} to IndexedDB:`, dbErr); }
+                    }
+                });
+            }
+            const original_final_text = accumulatedText;
+            let text_for_display = original_final_text;
+            const memoryRegex = /\[memory\]([\s\S]*?)\[\/memory\]/gi;
+            if (localStorage.getItem(MEMORY_ENABLED_KEY) === 'true') {
+                const memoryMatches = [...original_final_text.matchAll(memoryRegex)];
+                if (memoryMatches.length > 0) {
+                    let longTermMemory = JSON.parse(localStorage.getItem(LONG_TERM_MEMORY_KEY) || '[]');
+                    if (!Array.isArray(longTermMemory)) longTermMemory = [];
+                    memoryMatches.forEach(match => { const memoryContent = match[1].trim(); if (memoryContent && !longTermMemory.includes(memoryContent)) longTermMemory.push(memoryContent); });
+                    localStorage.setItem(LONG_TERM_MEMORY_KEY, JSON.stringify(longTermMemory));
+                }
+                text_for_display = original_final_text.replace(memoryRegex, '').trim();
+            }
+            if (assistantContentDiv) {
+                assistantContentDiv.innerHTML = renderMarkdown(text_for_display);
+                addCodeCopyButtons(assistantContentDiv);
+            } else if (text_for_display || memoryBadgeAdded) {
+                const result = createMessageElement('assistant', text_for_display, [], getTimestamp(), true);
+                if (memoryBadgeAdded) {
+                    const badge = document.createElement('div'); badge.className = 'memory-saved-badge';
+                    badge.innerHTML = `<button type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.58835 14.8823L9.90621 14.6188C10.2934 14.5413 10.649 14.351 10.9282 14.0718L13.9991 11.0009C14.5518 10.4482 14.5516 9.55204 13.9986 8.99962C13.446 8.4475 12.5504 8.44782 11.9982 9.00033L8.92793 12.0719C8.64889 12.351 8.45869 12.7065 8.38129 13.0936L8.11767 14.4117C8.06169 14.6915 8.30846 14.9383 8.58835 14.8823Z"></path><path d="M3 4C3 2.89543 3.89543 2 5 2V14C3.89543 14 3 13.1046 3 12V4Z"></path><path d="M6.97543 14H6V2H12C12.5523 2 13 2.44772 13 3V7.38574C12.3299 7.38522 11.6597 7.64065 11.1486 8.15198L8.07841 11.2235C7.63195 11.6702 7.32763 12.239 7.20378 12.8582L6.97543 14Z"></path></svg>Saved Memory</button>`;
+                    result.messageElement.insertBefore(badge, result.contentElement);
+                }
+            }
+            if (userMessageHistoryEntry.parts.length > 0 || filesToProcess.length > 0) {
+                if (serverUploadedFileDetails.length > 0) {
+                    serverUploadedFileDetails.forEach(fd => { if (fd.uri && fd.mime_type) { userMessageHistoryEntry.parts.push({ file_data: { mime_type: fd.mime_type, file_uri: fd.uri } }); } });
+                }
+                currentHistory.push(userMessageHistoryEntry);
+            }
+            currentHistory.push({ role: 'model', parts: [{ text: original_final_text }] });
+            saveCurrentConversation();
+            setSendingState(false);
+            scrollChatToBottom('smooth');
+        }
+    }
+
+    // --- Event Listeners ---
+    chatForm.addEventListener('submit', (e) => { e.preventDefault(); sendMessage(); });
+    sidebarOpenBtn.addEventListener('click', () => { 
+        sidebar.classList.add('open');
+        bodyEl.classList.add('sidebar-open');
+    });
+    sidebarCloseBtn.addEventListener('click', () => {
+        sidebar.classList.remove('open');
+        bodyEl.classList.remove('sidebar-open');
+    });
+    document.addEventListener('click', (e) => { 
+        if (window.innerWidth <= 768 && sidebar.classList.contains('open') && !sidebar.contains(e.target) && !sidebarOpenBtn.contains(e.target)) {
+            sidebar.classList.remove('open');
+            bodyEl.classList.remove('sidebar-open');
+        } 
+    });
+    newChatBtn.addEventListener('click', () => { if (!isSending) { startNewConversation(); if (window.innerWidth <= 768) { sidebar.classList.remove('open'); bodyEl.classList.remove('sidebar-open');} } });
+    chatInput.addEventListener('input', () => { updateSendButtonState(); adjustTextareaHeight(); });
+    chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (!sendBtn.disabled) sendMessage(); } });
+    chatInput.addEventListener('focus', () => { if (window.innerWidth <= 768) { setTimeout(() => { chatInput.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 200); } });
+    chatInput.addEventListener('paste', (event) => {
+        if (isSending) return; const items = event.clipboardData?.items;
+        if (!items || selectedFiles.length >= MAX_FILES_ALLOWED) return;
+        let filesToAddFromPaste = [];
+        for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf('image') !== -1) {
+                const pastedImageFile = items[i].getAsFile();
+                if (pastedImageFile) filesToAddFromPaste.push(new File([pastedImageFile], `pasted_image_${Date.now()}.${pastedImageFile.type.split('/')[1] || 'png'}`, { type: pastedImageFile.type }));
+            }
+        }
+        if (filesToAddFromPaste.length > 0) {
+            event.preventDefault();
+            const remainingSlots = MAX_FILES_ALLOWED - selectedFiles.length;
+            const actualFilesAdded = filesToAddFromPaste.slice(0, remainingSlots);
+            actualFilesAdded.forEach(file => { if (!selectedFiles.some(sf => sf.name === file.name && sf.size === file.size)) selectedFiles.push(file); });
+            if (filesToAddFromPaste.length > actualFilesAdded.length) alert(`Max ${MAX_FILES_ALLOWED} files. ${actualFilesAdded.length} image(s) from paste added.`);
+            renderFilePreviews(); updateSendButtonState(); adjustTextareaHeight(); fileInput.value = '';
+        }
+    });
+
+    // --- Settings Logic ---
+    function loadSettings() {
+        userNameInput.value = localStorage.getItem(USER_NAME_KEY) || ''; 
+        enableMemoryToggle.checked = localStorage.getItem(MEMORY_ENABLED_KEY) === 'true';
+    }
+    settingsBtn.addEventListener('click', () => { settingsPopup.classList.add('open'); loadSettings(); });
+    closeSettingsPopupBtn.addEventListener('click', () => settingsPopup.classList.remove('open'));
+    settingsPopup.addEventListener('click', (e) => { if (e.target === settingsPopup) settingsPopup.classList.remove('open'); });
+    saveSettingsBtn.addEventListener('click', () => {
+        const newName = userNameInput.value.trim();
+        if (newName) localStorage.setItem(USER_NAME_KEY, newName); else localStorage.removeItem(USER_NAME_KEY);
+        localStorage.setItem(MEMORY_ENABLED_KEY, String(enableMemoryToggle.checked));
+        settingsPopup.classList.remove('open');
+        if (mainEl.classList.contains('splash-visible')) startNewConversation(); 
+    });
+    clearAllChatsBtn.addEventListener('click', () => {
+        if (confirm("Are you sure you want to delete ALL conversations and memories? This cannot be undone.")) {
+            try {
+                const keys = Object.keys(localStorage).filter(k => k.startsWith(CONVERSATION_PREFIX));
+                keys.forEach(key => localStorage.removeItem(key));
+                localStorage.removeItem(LONG_TERM_MEMORY_KEY);
+                settingsPopup.classList.remove('open');
+                loadConversationsList(); 
+                startNewConversation(); 
+            } catch (e) { console.error("Error clearing chat history:", e); alert("An error occurred."); }
+        }
+    });
+
+    // --- Memory Management Modal Logic ---
+    function renderMemoryList() {
+        const memories = JSON.parse(localStorage.getItem(LONG_TERM_MEMORY_KEY) || '[]');
+        memoryListContainer.innerHTML = '';
+        if (memories.length === 0) {
+            memoryListContainer.innerHTML = '<p style="font-size: 13px; color: var(--text-muted);">No memories saved yet.</p>';
+        } else {
+            memories.forEach((mem, index) => {
+                const itemDiv = document.createElement('div'); itemDiv.className = 'memory-item';
+                itemDiv.innerHTML = `<input type="text" class="memory-input" value="${simpleSanitize(mem)}" data-index="${index}"><button class="delete-memory-btn" title="Delete this memory">×</button>`;
+                itemDiv.querySelector('.delete-memory-btn').addEventListener('click', (e) => { e.currentTarget.closest('.memory-item').remove(); });
+                memoryListContainer.appendChild(itemDiv);
+            });
+        }
+    }
+    viewMemoriesBtn.addEventListener('click', () => { renderMemoryList(); memoryManagementPopup.classList.add('open'); });
+    closeMemoryPopupBtn.addEventListener('click', () => memoryManagementPopup.classList.remove('open'));
+    saveMemoriesBtn.addEventListener('click', () => {
+        const memoryInputs = memoryListContainer.querySelectorAll('.memory-input');
+        const newMemories = Array.from(memoryInputs).map(input => input.value.trim()).filter(mem => mem.length > 0);
+        localStorage.setItem(LONG_TERM_MEMORY_KEY, JSON.stringify(newMemories));
+        memoryManagementPopup.classList.remove('open');
+    });
+    addNewMemoryBtn.addEventListener('click', () => {
+        if (memoryListContainer.querySelector('p')) memoryListContainer.innerHTML = '';
+        const itemDiv = document.createElement('div'); itemDiv.className = 'memory-item';
+        itemDiv.innerHTML = `<input type="text" class="memory-input" value="" placeholder="New fact about the user..."><button class="delete-memory-btn" title="Delete this memory">×</button>`;
+        itemDiv.querySelector('.delete-memory-btn').addEventListener('click', (e) => { e.currentTarget.closest('.memory-item').remove(); });
+        memoryListContainer.appendChild(itemDiv); itemDiv.querySelector('input').focus();
+    });
+
+    // --- Initial Setup ---
+    function initializeApp() {
+        updateSendButtonState(); 
+        adjustTextareaHeight(); 
+        loadConversationsList();
+        dbHelper.initDB().then(() => console.log("Local file database is ready."))
+            .catch(err => {
+                console.error(err);
+                createMessageElement('error', "Could not initialize local file storage.", [], null, false);
+            });
+        startNewConversation();
+        if (!BACKEND_URL || BACKEND_URL.includes("yourusername.pythonanywhere.com")) { 
+            mainEl.classList.remove('splash-visible');
+            mainEl.classList.add('chat-active');
+            mainEl.appendChild(inputArea);
+            createMessageElement('error', "Reminder: Update the BACKEND_URL constant in the script for the chat to work.", [], null, false);
+        }
+        window.addEventListener('beforeunload', () => { if (mainEl.classList.contains('chat-active') && currentHistory.length > 1 && !isSending) saveCurrentConversation(); });
+    }
+
+    initializeApp();
+
+  </script>
+</body>
+</html>
