@@ -7,6 +7,8 @@
   <title>TimesLast AI</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   
   <!-- Highlight.js CDN -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
@@ -282,7 +284,7 @@
         margin-top: 4px; padding: 0 5px;
     }
     .message.user .message-footer { justify-content: flex-end; }
-    .message.assistant .message-footer, .message.error .message-footer { justify-content: flex-start; }
+    .message.assistant .message-footer, .message.error .message-footer, .message.notification .message-footer { justify-content: flex-start; }
     .message .timestamp { font-size: 10px; color: var(--text-muted); }
     .copy-btn {
         background: none; border: none; color: var(--text-muted);
@@ -315,17 +317,20 @@
     }
     .message.user .message-bubble:empty { display: none; margin-top: 0;}
     
-    /* User Message - File Block Styling */
-    .message.user .file-block-container {
+    /* User & Notification Message - File Block Styling */
+    .file-block-container {
         display: flex; flex-direction: column; gap: 4px;
-        order: 1; align-items: flex-end; width: 100%;
+        order: 1; width: 100%;
     }
-    .message.user .file-block { 
+    .message.user .file-block-container { align-items: flex-end; }
+    .message.notification .file-block-container { align-items: flex-start; }
+
+    .file-block { 
         background: var(--bubble-file-bg); color: var(--bubble-file-text);
         border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         width: fit-content; overflow: hidden; box-sizing: border-box;
     }
-    .message.user .media-file-block {
+    .media-file-block {
         padding: 0; display: flex; flex-direction: column; max-width: 320px; width: 100%;
     }
     .media-preview-container { 
@@ -351,7 +356,7 @@
         white-space: nowrap; text-overflow: ellipsis; overflow: hidden; margin-bottom: 2px;
     }
     .media-caption .file-info { font-size: 11px; color: var(--bubble-file-info-text); white-space: nowrap; }
-    .message.user .multi-image-block {
+    .multi-image-block {
         max-width: 320px; width: 100%; padding: 8px; display: flex; flex-direction: column; 
     }
     .multi-image-preview-grid {
@@ -366,16 +371,39 @@
     .multi-image-block .multi-image-caption-details { text-align: left; padding-top: 6px; }
     .multi-image-block .multi-image-caption-details .file-name { font-size: 13px; font-weight: 500; color: var(--bubble-file-text); }
     .multi-image-block .multi-image-caption-details .file-info { font-size: 11px; color: var(--bubble-file-info-text); }
-    .message.user .generic-file-block {
+    .generic-file-block {
         padding: 8px 12px; display: flex; align-items: center; gap: 10px; max-width: 320px;
         width: 100%;
     }
-    .message.user .generic-file-block .file-icon svg { display: block; }
-    .message.user .generic-file-block .file-icon svg path[fill="#F8CA27"] { fill: var(--accent); }
-    .message.user .generic-file-block .file-icon svg path[fill="#F8EDC7"] { fill: var(--bubble-file-text); }
-    .message.user .generic-file-block .file-details { overflow: hidden; }
-    .message.user .generic-file-block .file-name { font-size: 14px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
-    .message.user .generic-file-block .file-info { font-size: 12px; color: var(--bubble-file-info-text); white-space: nowrap; }
+    .generic-file-block .file-icon svg { display: block; }
+    .generic-file-block .file-icon svg path[fill="#F8CA27"] { fill: var(--accent); }
+    .generic-file-block .file-icon svg path[fill="#F8EDC7"] { fill: var(--bubble-file-text); }
+    .generic-file-block .file-details { overflow: hidden; }
+    .generic-file-block .file-name { font-size: 14px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+    .generic-file-block .file-info { font-size: 12px; color: var(--bubble-file-info-text); white-space: nowrap; }
+    
+    /* ZIP Download Block Specifics */
+    .zip-download-block {
+        padding: 8px 8px 8px 12px; /* Less padding on the right for the button */
+    }
+    .zip-download-block .download-zip-btn {
+        background: none; border: none; cursor: pointer;
+        color: var(--text-muted);
+        width: 32px; height: 32px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        transition: background-color 0.2s, color 0.2s;
+        margin-left: auto; /* Push to the right */
+        flex-shrink: 0;
+    }
+    .zip-download-block .download-zip-btn:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+        color: var(--text);
+    }
+    .zip-download-block .download-zip-btn svg {
+        width: 20px; height: 20px;
+    }
+
 
     /* Assistant message */
     .message.assistant { align-self: flex-start; align-items: flex-start;}
@@ -383,9 +411,140 @@
         padding: 4px 0; color: var(--bubble-assistant-text);
         word-wrap: break-word; max-width: 100%; line-height: 1.5;
     }
-    .message.assistant .code-block-wrapper { 
-        position: relative; 
-        margin: 10px 0; 
+    
+    /* --- Collapsible Code Block & File Op Notification --- */
+    .code-block-wrapper {
+        position: relative;
+        margin: 10px 0;
+        border: 1px solid var(--input-border);
+        border-radius: 8px;
+        background-color: var(--input-bg);
+        overflow: hidden;
+    }
+    .code-block-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 8px 6px 12px;
+        background-color: rgba(255, 255, 255, 0.03);
+        cursor: pointer;
+    }
+    .code-block-header-left {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-grow: 1;
+        min-width: 0; /* Prevents flexbox overflow */
+    }
+    .code-language-name {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-muted);
+        text-transform: capitalize;
+        flex-shrink: 0;
+    }
+    .code-block-actions {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+    .code-block-actions button {
+        background: none;
+        border: 1px solid transparent;
+        color: var(--text-muted);
+        cursor: pointer;
+        width: 28px;
+        height: 28px;
+        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background-color 0.2s, color 0.2s;
+    }
+    .code-block-actions button:hover {
+        background-color: var(--scrollbar-thumb);
+        color: var(--text);
+    }
+    .code-block-actions button svg {
+        width: 16px;
+        height: 16px;
+    }
+    .code-block-wrapper pre {
+        padding: 12px;
+        margin: 0;
+        overflow-x: auto;
+        font-size: 0.9em;
+        transition: padding 0.3s ease, max-height 0.4s ease-out;
+        max-height: 1000px; /* Arbitrary large number */
+    }
+    .code-block-wrapper.collapsed pre {
+        max-height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        overflow: hidden;
+    }
+    .code-block-toggle-btn .icon-expand-less { display: block; }
+    .code-block-toggle-btn .icon-expand-more { display: none; }
+    .code-block-wrapper.collapsed .code-block-toggle-btn .icon-expand-less { display: none; }
+    .code-block-wrapper.collapsed .code-block-toggle-btn .icon-expand-more { display: block; }
+
+    .file-op-caption {
+        font-size: 11px;
+        font-style: italic;
+        color: var(--text-muted);
+        padding-left: 10px;
+        margin-top: -8px;
+        margin-bottom: 12px;
+    }
+    .file-op-caption code {
+        font-style: normal;
+        color: var(--text);
+        background: var(--input-bg);
+        padding: 1px 4px;
+        border-radius: 3px;
+    }
+
+
+    /* --- Mermaid Diagram Styles --- */
+    .mermaid-diagram-wrapper {
+        overflow: auto; /* Enable both horizontal and vertical scrolling */
+        max-height: 60vh; /* Limit vertical height */
+        padding: 10px;
+        margin: 10px 0;
+        border: 1px solid var(--input-border);
+        border-radius: 8px;
+        background-color: rgba(0,0,0,0.2);
+    }
+    .mermaid-diagram-wrapper::-webkit-scrollbar { height: 8px; width: 8px; }
+    .mermaid-diagram-wrapper::-webkit-scrollbar-track { background: transparent; }
+    .mermaid-diagram-wrapper::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 4px; }
+    .mermaid-diagram-wrapper::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
+
+    .mermaid-diagram-container {
+        padding: 16px;
+        margin: 0;
+        display: flex;
+        justify-content: flex-start; /* Align diagrams to the left */
+        align-items: flex-start;
+        background: transparent;
+        min-width: 100%;
+        width: max-content; /* Allow container to grow with SVG */
+    }
+    .mermaid-diagram-container svg {
+        max-width: none !important; /* Allow svg to be its natural width */
+        height: auto;
+    }
+    
+    .flowchart-placeholder {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 80px;
+        color: var(--text-muted);
+        font-style: italic;
+        padding: 20px;
+        text-align: center;
     }
     
     /* --- Table styles --- */
@@ -408,28 +567,6 @@
     .message.assistant th:first-child, .message.assistant td:first-child { border-left: none; }
     .message.assistant th:last-child, .message.assistant td:last-child { border-right: none; }
     
-    .message.assistant pre {
-        padding: 12px; padding-top: 40px; border-radius: 6px; 
-        overflow-x: auto; border: 1px solid var(--input-bg);
-        font-size: 0.9em; margin: 0;
-    }
-    .code-language-name {
-        position: absolute; top: 10px; left: 12px;
-        font-size: 12px; font-weight: 500; color: var(--text-muted); text-transform: capitalize;
-    }
-    .code-copy-btn {
-        position: absolute; top: 8px; right: 8px;
-        background-color: var(--input-bg); color: var(--text-muted);
-        border: 1px solid var(--input-border); border-radius: 5px;
-        padding: 4px 8px; font-size: 12px; cursor: pointer;
-        display: flex; align-items: center; gap: 6px;
-        opacity: 1; transition: background-color 0.2s;
-    }
-    .code-copy-btn:hover { background-color: var(--scrollbar-thumb); }
-    .code-copy-btn.copied { cursor: default; }
-    .code-copy-btn.copied:hover { background-color: var(--input-bg); }
-    .code-copy-btn.copied span { font-size: 11px; color: var(--text-muted); }
-    .code-copy-btn svg { width: 14px; height: 14px; }
     .message.assistant code { font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace; }
     .message.assistant code:not(pre code) { background-color: var(--body-bg); padding: 2px 5px; border-radius: 4px; font-size: 0.9em; border: 1px solid var(--input-bg); }
     .message.assistant strong { font-weight: 600; color: var(--text); }
@@ -440,16 +577,28 @@
     .message.assistant .message-content a:visited { color: var(--link-visited-color); }
     .message.assistant .message-content a:hover, .message.assistant .message-content a:active { color: var(--send-button-hover-bg); text-decoration: underline; }
 
-    /* Error message */
-    .message.error { align-self: flex-start; align-items: flex-start; }
-    .message.error .message-content {
-        padding: 10px 14px; color: var(--bubble-error-text);
-        background: var(--bubble-error-bg); border: 1px solid var(--bubble-error-border);
+    /* Error & Notification message */
+    .message.error, .message.notification { align-self: flex-start; align-items: flex-start; }
+    .message.error .message-content, .message.notification .message-content {
+        padding: 10px 14px;
         border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         width: fit-content; max-width: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .message.error .message-content {
+        color: var(--bubble-error-text);
+        background: var(--bubble-error-bg); border: 1px solid var(--bubble-error-border);
+    }
+    .message.notification .message-content {
+        padding: 0;
+        background: none;
+        border: none;
+        box-shadow: none;
+        width: 100%;
     }
     .message.error .message-content strong { color: inherit; font-weight: 600; }
-    .message.error .timestamp { text-align: left; padding-left: 5px;}
+    .message.error .timestamp, .message.notification .timestamp { text-align: left; padding-left: 5px;}
 
     .memory-saved-badge {
         margin-bottom: 6px;
@@ -906,6 +1055,8 @@
     let isSending = false; 
     let currentConversationId = null; 
     let currentHistory = [];
+    let virtualFiles = {}; // In-memory file system for the current session
+    window.zipBlobs = {}; // Global object to store zip blob URLs
 
     // --- Suggestion Prompts Data ---
     const allSuggestionPrompts = [
@@ -1003,40 +1154,64 @@
         });
     }
 
-    function addCodeCopyButtons(container) {
+    function renderCollapsibleCodeBlocks(container) {
         const pres = container.querySelectorAll('pre:not(.hljs-added)');
 
         pres.forEach(pre => {
             pre.classList.add('hljs-added');
-
             const codeEl = pre.querySelector('code');
             if (!codeEl) return;
+
+            // Mermaid diagrams are handled separately now.
+            if (codeEl.classList.contains('language-mermaid')) {
+                return;
+            }
 
             const wrapper = document.createElement('div');
             wrapper.className = 'code-block-wrapper';
 
-            pre.parentNode.insertBefore(wrapper, pre);
-            wrapper.appendChild(pre);
+            const langClass = Array.from(codeEl.classList).find(cls => cls.startsWith('language-'));
+            const langName = langClass ? langClass.replace('language-', '') : 'text';
 
-            const langName = document.createElement('span');
-            langName.className = 'code-language-name';
+            const header = document.createElement('div');
+            header.className = 'code-block-header';
+            header.addEventListener('click', () => wrapper.classList.toggle('collapsed'));
+            
+            const leftDiv = document.createElement('div');
+            leftDiv.className = 'code-block-header-left';
+
+            const langSpan = document.createElement('span');
+            langSpan.className = 'code-language-name';
+            langSpan.textContent = langName;
+
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'code-block-actions';
 
             const copyButton = document.createElement('button');
-            copyButton.className = 'code-copy-btn';
-            const originalButtonHTML = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M7 5C7 3.34315 8.34315 2 10 2H19C20.6569 2 22 3.34315 22 5V14C22 15.6569 20.6569 17 19 17H17V19C17 20.6569 15.6569 22 14 22H5C3.34315 22 2 20.6569 2 19V10C2 8.34315 3.34315 7 5 7H7V5ZM9 7H14C15.6569 7 17 8.34315 17 10V15H19C19.5523 15 20 14.5523 20 14V5C20 4.44772 19.5523 4 19 4H10C9.44772 4 9 4.44772 9 5V7ZM5 9C4.44772 9 4 9.44772 4 10V19C4 19.5523 4.44772 20 5 20H14C14.5523 20 15 19.5523 15 19V10C15 9.44772 14.5523 9 14 9H5Z" fill="currentColor"></path></svg><span>Copy</span>`;
-            copyButton.innerHTML = originalButtonHTML;
-            copyButton.addEventListener('click', () => {
-                const codeToCopy = codeEl.innerText || '';
-                copyToClipboard(codeToCopy, copyButton, originalButtonHTML);
+            copyButton.title = 'Copy code';
+            copyButton.innerHTML = `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M7 5C7 3.34315 8.34315 2 10 2H19C20.6569 2 22 3.34315 22 5V14C22 15.6569 20.6569 17 19 17H17V19C17 20.6569 15.6569 22 14 22H5C3.34315 22 2 20.6569 2 19V10C2 8.34315 3.34315 7 5 7H7V5ZM9 7H14C15.6569 7 17 8.34315 17 10V15H19C19.5523 15 20 14.5523 20 14V5C20 4.44772 19.5523 4 19 4H10C9.44772 4 9 4.44772 9 5V7ZM5 9C4.44772 9 4 9.44772 4 10V19C4 19.5523 4.44772 20 5 20H14C14.5523 20 15 19.5523 15 19V10C15 9.44772 14.5523 9 14 9H5Z" fill="currentColor"></path></svg>`;
+            const originalCopyHTML = copyButton.innerHTML;
+            copyButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                copyToClipboard(codeEl.textContent, copyButton, originalCopyHTML);
             });
 
+            const toggleButton = document.createElement('button');
+            toggleButton.className = 'code-block-toggle-btn';
+            toggleButton.title = 'Toggle code';
+            toggleButton.innerHTML = `<span class="icon-expand-less"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6 1.41 1.41z"/></svg></span><span class="icon-expand-more"><svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/></svg></span>`;
+            
+            actionsDiv.appendChild(copyButton);
+            actionsDiv.appendChild(toggleButton);
+            leftDiv.appendChild(langSpan);
+            header.appendChild(leftDiv);
+            header.appendChild(actionsDiv);
+
+            pre.parentNode.insertBefore(wrapper, pre);
+            wrapper.appendChild(header);
+            wrapper.appendChild(pre);
+
             hljs.highlightElement(codeEl);
-
-            const languageClass = Array.from(codeEl.classList).find(cls => cls.startsWith('language-'));
-            langName.textContent = languageClass ? languageClass.replace('language-', '') : 'text';
-
-            wrapper.appendChild(langName);
-            wrapper.appendChild(copyButton);
         });
     }
 
@@ -1081,7 +1256,6 @@
     function createMessageElement(role, textContent, fileInfos = [], timestamp = null, animate = true) {
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('message', role);
-        if (role === 'system') { messageDiv.style.cssText = 'font-style: italic; font-size: 0.9em; color: var(--text-muted); align-self: center; max-width: 80%; text-align: center;';}
         if (animate) { messageDiv.style.opacity = '0'; messageDiv.style.transform = 'translateY(10px)'; } else { messageDiv.style.opacity = '1'; messageDiv.style.transform = 'translateY(0)'; }
         const messageContentDiv = document.createElement('div');
         messageContentDiv.className = 'message-content';
@@ -1209,13 +1383,17 @@
         } else if (role === 'assistant') {
             if (textContent && textContent.trim() !== '') {
                 messageContentDiv.innerHTML = renderMarkdown(textContent);
-                addCodeCopyButtons(messageContentDiv);
+                renderCollapsibleCodeBlocks(messageContentDiv);
             }
-        } else if (role === 'error') {
-            const strong = document.createElement('strong'); strong.textContent = "Error: "; messageContentDiv.appendChild(strong);
-            messageContentDiv.appendChild(document.createTextNode(simpleSanitize(textContent.toLowerCase().startsWith('error:') ? textContent.substring(6).trim() : textContent)));
-        } else if (role === 'system') {
-            messageContentDiv.innerHTML = simpleSanitize(textContent);
+        } else if (role === 'error' || role === 'notification') {
+             if (textContent) messageContentDiv.innerHTML = textContent; // Allow HTML for custom blocks
+             if (role === 'error') {
+                const strong = document.createElement('strong'); strong.textContent = "Error: "; 
+                const errorText = textContent.toLowerCase().startsWith('error:') ? textContent.substring(6).trim() : textContent;
+                messageContentDiv.innerHTML = ''; // Clear existing
+                messageContentDiv.appendChild(strong);
+                messageContentDiv.appendChild(document.createTextNode(errorText));
+             }
         }
 
         messageDiv.appendChild(messageContentDiv);
@@ -1366,6 +1544,7 @@
             const storedData = JSON.parse(localStorage.getItem(conversationId));
             if (storedData && storedData.history && Array.isArray(storedData.history)) {
                 currentConversationId = conversationId; messagesContainer.innerHTML = ''; currentHistory = []; clearAllSelectedFiles();
+                virtualFiles = {}; // Clear virtual files when loading a conversation
                 
                 for (const savedItem of storedData.history) {
                     if (!savedItem || !savedItem.role || !savedItem.parts || !Array.isArray(savedItem.parts)) continue;
@@ -1389,18 +1568,26 @@
                             textForDisplay = "Error"; displayRole = 'error';
                         }
                         if (textForDisplay === "Error" || (savedItem.role === 'model' && textForDisplay?.toLowerCase().startsWith('error:'))) displayRole = 'error';
-                        let textToRenderOnLoad = textForDisplay;
-                        if (savedItem.role === 'model' && textToRenderOnLoad) {
-                            textToRenderOnLoad = textToRenderOnLoad.replace(/\[memory\]([\s\S]*?)\[\/memory\]/gi, '').trim();
-                        }
-                        const messageElements = createMessageElement(displayRole, textToRenderOnLoad, fileInfosForDisplay, savedItem.timestamp || getTimestamp(), false);
-                        const originalText = savedItem.parts.map(p => p.text || '').join('');
-                        if (localStorage.getItem(MEMORY_ENABLED_KEY) === 'true' && /\[memory\]/i.test(originalText)) {
-                            const badge = document.createElement('div'); badge.className = 'memory-saved-badge';
-                            badge.innerHTML = `<button type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.58835 14.8823L9.90621 14.6188C10.2934 14.5413 10.649 14.351 10.9282 14.0718L13.9991 11.0009C14.5518 10.4482 14.5516 9.55204 13.9986 8.99962C13.446 8.4475 12.5504 8.44782 11.9982 9.00033L8.92793 12.0719C8.64889 12.351 8.45869 12.7065 8.38129 13.0936L8.11767 14.4117C8.06169 14.6915 8.30846 14.9383 8.58835 14.8823Z"></path><path d="M3 4C3 2.89543 3.89543 2 5 2V14C3.89543 14 3 13.1046 3 12V4Z"></path><path d="M6.97543 14H6V2H12C12.5523 2 13 2.44772 13 3V7.38574C12.3299 7.38522 11.6597 7.64065 11.1486 8.15198L8.07841 11.2235C7.63195 11.6702 7.32763 12.239 7.20378 12.8582L6.97543 14Z"></path></svg>Saved Memory</button>`;
-                            if (messageElements && messageElements.messageElement && messageElements.contentElement) {
-                                messageElements.messageElement.insertBefore(badge, messageElements.contentElement);
-                            }
+                        
+                        // On load, we need to re-process the text to recreate virtual files
+                        handleAiCommands(textForDisplay, null, true); // `true` for silent mode to rebuild virtualFiles
+                        
+                        // For assistant messages, handle complex rendering
+                        if (displayRole === 'assistant') {
+                             const { messageElement, contentElement } = createMessageElement(displayRole, '', fileInfosForDisplay, savedItem.timestamp || getTimestamp(), false);
+                             const textToRender = textForDisplay
+                                .replace(/\[flowchart\]\s*```mermaid([\s\S]*?)```\s*\[\/flowchart\]/gs, (match, mermaidCode) => {
+                                    return `<div class="mermaid-diagram-wrapper"><div class="mermaid-diagram-container"><div class="mermaid">${mermaidCode.trim()}</div></div></div>`;
+                                })
+                                .replace(/\[\/?(create|edit|zip|flowchart|memory)\]/gs, ''); 
+
+                            contentElement.innerHTML = renderMarkdown(textToRender);
+                            renderCollapsibleCodeBlocks(contentElement);
+                            handleAiCommands(textForDisplay, contentElement);
+                            try { mermaid.run({ nodes: contentElement.querySelectorAll('.mermaid') }); } catch (e) { console.error("Mermaid rendering error on load:", e); }
+                        } else {
+                            // For user, error, notification messages, use simpler rendering
+                            createMessageElement(displayRole, textForDisplay, fileInfosForDisplay, savedItem.timestamp || getTimestamp(), false);
                         }
                     }
                 }
@@ -1414,6 +1601,8 @@
         if (mainEl.classList.contains('chat-active') && currentHistory.length > 1) saveCurrentConversation(); 
         
         currentConversationId = null; currentHistory = []; messagesContainer.innerHTML = ''; clearAllSelectedFiles();
+        virtualFiles = {}; // Clear virtual file system on new chat
+        window.zipBlobs = {}; // Clear stored zip blobs
         chatInput.value = ''; adjustTextareaHeight(); updateSendButtonState(); highlightCurrentConversation(null);
 
         mainEl.classList.add('splash-visible');
@@ -1424,10 +1613,30 @@
         const memoryEnabled = localStorage.getItem(MEMORY_ENABLED_KEY) === 'true';
         let systemPromptParts = [];
         let finalSystemPrompt = "SYSTEM PROMPT (unrelated to your built in one, this is for the general timeslastai.github.io site you're on) (Instructions for AI):\n\n";
+        
+        systemPromptParts.push(
+            "You have a virtual file system. Use the following commands wrapped in brackets to manage files. The user will not see these command tags in the final output.\n\n" +
+            "1.  **Create File**: To create a file, use `[create]filename.ext[/create]` on one line, and then provide the content in a standard markdown code block immediately after.\n\n" +
+            "2.  **Edit File**: To edit an existing file, use `[edit]filename.ext[/edit]` and provide the *full, new content* in a code block.\n\n" +
+            "3.  **Zip Files**: To zip files and send them to the user, use `[zip]file1.ext, file2.ext, ...[/zip]`. List all files to be included, separated by commas.\n\n" +
+            "4.  **Flowchart/Diagram**: To generate a flowchart or diagram, use `[flowchart]` and provide the diagram definition in a `mermaid` code block. The final output will be a rendered, sideways-oriented diagram with scrollbars if it's too wide. Use standard Mermaid syntax with a 'TD' (Top-Down) or 'LR' (Left-Right) graph orientation.\n" +
+            "    *Example*:\n" +
+            "    [flowchart]\n" +
+            "    ```mermaid\n" +
+            "    graph TD;\n" +
+            "        A[Start]-->B{Is it Raining?};\n" +
+            "        B--Yes-->C[Bring Umbrella];\n" +
+            "        B--No-->D[Enjoy the Day];\n" +
+            "        C-->E[End];\n" +
+            "        D-->E[End];\n" +
+            "    ```\n" +
+            "    [/flowchart]\n"
+        );
+
         const savedName = localStorage.getItem(USER_NAME_KEY);
         if (savedName) systemPromptParts.push(`The user's name is ${savedName}. Refer to them by this name when appropriate.`);
         if (memoryEnabled) {
-            systemPromptParts.push("You have a memory function. To remember a key detail, use the command: `[memory] The user's favorite color is blue. [/memory]`. Use this ONLY for significant, long-term facts. The user will not see the `[memory]` command.");
+            systemPromptParts.push("You have a memory function. To remember a key detail, use the command: `[memory]The user's favorite color is blue.[/memory]`. Use this ONLY for significant, long-term facts. The user will not see the `[memory]` command.");
             const longTermMemory = JSON.parse(localStorage.getItem(LONG_TERM_MEMORY_KEY) || '[]');
             if (longTermMemory.length > 0) systemPromptParts.push("SAVED MEMORIES (Refer to these facts about the user):\n- " + longTermMemory.join('\n- '));
             const lastConvHistory = getLastConversationHistory();
@@ -1456,6 +1665,117 @@
         document.querySelectorAll('.conversation-item').forEach(item => { item.classList.toggle('active', item.dataset.id === conversationId); }); 
     }
 
+    // --- AI Command Handling ---
+    function handleZipDownload(event) {
+        const button = event.currentTarget;
+        const zipId = button.dataset.zipId;
+        const blobUrl = window.zipBlobs[zipId];
+        if (blobUrl) {
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = button.dataset.filename || "archive.zip";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } else {
+            console.error("Could not find zip blob for ID:", zipId);
+            alert("Sorry, there was an error retrieving the file for download.");
+        }
+    }
+
+    function createZipDownloadMessage(zipFilename, totalSize) {
+        const truncatedName = truncateFilename(zipFilename, 20);
+        const sizeInfo = formatBytes(totalSize);
+        const fileType = zipFilename.split('.').pop().toUpperCase();
+        const zipId = 'zip_' + Date.now();
+
+        const messageContent = `
+            <div class="file-block-container">
+                <div class="file-block generic-file-block zip-download-block">
+                    <div class="file-icon">
+                        <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 9C7 6.79086 8.79086 5 11 5L18.6383 5C19.1906 5 19.6383 5.44772 19.6383 6V6.92308C19.6383 9.13222 21.4292 10.9231 23.6383 10.9231H24C24.5523 10.9231 25 11.3708 25 11.9231V23C25 25.2091 23.2091 27 21 27H11C8.79086 27 7 25.2091 7 23V9Z" fill="#F8CA27"></path><g><path d="M19.6602 6.92458V5.84766L24.4126 10.9246H23.6602C21.451 10.9246 19.6602 9.13372 19.6602 6.92458Z" fill="#F8EDC7"></path></g></svg>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-name" title="${simpleSanitize(zipFilename)}">${simpleSanitize(truncatedName)}</div>
+                        <div class="file-info">${fileType} ${sizeInfo}</div>
+                    </div>
+                    <button class="download-zip-btn" data-zip-id="${zipId}" data-filename="${simpleSanitize(zipFilename)}" title="Download ${simpleSanitize(zipFilename)}">
+                        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                    </button>
+                </div>
+            </div>`;
+        
+        const { messageElement } = createMessageElement('notification', messageContent);
+        const downloadBtn = messageElement.querySelector('.download-zip-btn');
+        return { zipId, downloadBtn };
+    }
+    
+    function handleAiCommands(text, containerElement = null, silent = false) {
+        // Flowchart is handled separately in sendMessage, so it's removed from here.
+        const commandRegex = /\[(create|edit|zip|memory)\]([\s\S]*?)\[\/\1\]/gs;
+        
+        const commands = Array.from(text.matchAll(commandRegex));
+
+        for (const match of commands) {
+            const [fullMatch, command, content] = match;
+            let textAfterCommand = text.substring(match.index + fullMatch.length);
+            
+            if (command === 'create' || command === 'edit') {
+                const filename = content.trim();
+                const codeBlockRegex = /^\s*```(?:\w+\n)?([\s\S]*?)```/;
+                const codeMatch = textAfterCommand.match(codeBlockRegex);
+
+                if (codeMatch) {
+                    const code = codeMatch[1];
+                    virtualFiles[filename] = code;
+
+                    if (!silent && containerElement) {
+                        const codeBlocksInTextBefore = (text.substring(0, match.index).match(/```/g) || []).length / 2;
+                        const targetBlockIndex = Math.floor(codeBlocksInTextBefore);
+                        
+                        const allCodeBlocks = containerElement.querySelectorAll('.code-block-wrapper');
+                        const targetBlock = allCodeBlocks[targetBlockIndex];
+                        
+                        if (targetBlock && !targetBlock.nextElementSibling?.classList.contains('file-op-caption')) {
+                            const caption = document.createElement('div');
+                            caption.className = 'file-op-caption';
+                            caption.innerHTML = `(${command === 'create' ? 'created' : 'updated'} file: <code>${simpleSanitize(filename)}</code>)`;
+                            targetBlock.parentNode.insertBefore(caption, targetBlock.nextSibling);
+                        }
+                    }
+                }
+            } else if (command === 'zip') {
+                if (!silent) {
+                    const filenames = content.split(',').map(f => f.trim()).filter(f => f);
+                    if (filenames.length > 0) {
+                        const zip = new JSZip();
+                        let filesAdded = 0;
+                        let totalSize = 0;
+                        filenames.forEach(fname => {
+                            if (virtualFiles.hasOwnProperty(fname)) {
+                                const fileContent = virtualFiles[fname];
+                                zip.file(fname, fileContent);
+                                totalSize += new Blob([fileContent]).size;
+                                filesAdded++;
+                            } else {
+                                createMessageElement('error', `Cannot zip file: <code>${simpleSanitize(fname)}</code> does not exist.`);
+                            }
+                        });
+                        if (filesAdded > 0) {
+                            const zipFilename = filenames.length > 1 ? 'archive.zip' : filenames.split('.') + '.zip';
+                            zip.generateAsync({ type: "blob" }).then(function(blobContent) {
+                                const { zipId, downloadBtn } = createZipDownloadMessage(zipFilename, totalSize);
+                                const blobUrl = URL.createObjectURL(blobContent);
+                                window.zipBlobs[zipId] = blobUrl;
+                                downloadBtn.addEventListener('click', handleZipDownload);
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     async function sendMessage() {
         if (isSending) return;
 
@@ -1464,11 +1784,9 @@
 
         if (rawUserInput.trim() === '' && filesToProcess.length === 0) return;
 
-        // Transition from splash to chat view
         if (mainEl.classList.contains('splash-visible')) {
             mainEl.classList.remove('splash-visible');
             mainEl.classList.add('chat-active');
-            // Move input area back to its original container at the bottom
             mainEl.appendChild(inputArea);
         }
 
@@ -1542,20 +1860,32 @@
                                 assistantFooterDiv = result.footerElement;
                             }
                             accumulatedText += parsedData.text_chunk;
-                            let textToRender = accumulatedText;
-                            const memoryRegex = /\[memory\]([\s\S]*?)\[\/memory\]/gi;
-                            if (localStorage.getItem(MEMORY_ENABLED_KEY) === 'true' && textToRender.includes('[memory]')) {
+                            
+                            // --- Streaming Logic ---
+                            let textToRender = accumulatedText.replace(/\[memory\][\s\S]*?\[\/memory\]/g, '');
+
+                            const flowchartRegex = /\[flowchart\]([\s\S]*?)(\[\/flowchart\]|$)/g;
+                            textToRender = textToRender.replace(flowchartRegex, (match, content, endTag) => {
+                                if (endTag !== '[/flowchart]') {
+                                    return `<div class="mermaid-diagram-wrapper"><div class="flowchart-placeholder">Crafting flowchart...</div></div>`;
+                                }
+                                return ''; 
+                            });
+
+                            assistantContentDiv.innerHTML = renderMarkdown(textToRender);
+
+                            if (localStorage.getItem(MEMORY_ENABLED_KEY) === 'true' && accumulatedText.includes('[memory]')) {
                                 if (!memoryBadgeAdded) {
                                     const badge = document.createElement('div'); badge.className = 'memory-saved-badge';
                                     badge.innerHTML = `<button type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.58835 14.8823L9.90621 14.6188C10.2934 14.5413 10.649 14.351 10.9282 14.0718L13.9991 11.0009C14.5518 10.4482 14.5516 9.55204 13.9986 8.99962C13.446 8.4475 12.5504 8.44782 11.9982 9.00033L8.92793 12.0719C8.64889 12.351 8.45869 12.7065 8.38129 13.0936L8.11767 14.4117C8.06169 14.6915 8.30846 14.9383 8.58835 14.8823Z"></path><path d="M3 4C3 2.89543 3.89543 2 5 2V14C3.89543 14 3 13.1046 3 12V4Z"></path><path d="M6.97543 14H6V2H12C12.5523 2 13 2.44772 13 3V7.38574C12.3299 7.38522 11.6597 7.64065 11.1486 8.15198L8.07841 11.2235C7.63195 11.6702 7.32763 12.239 7.20378 12.8582L6.97543 14Z"></path></svg>Saved Memory</button>`;
                                     assistantMessageWrapperDiv.insertBefore(badge, assistantContentDiv); memoryBadgeAdded = true;
                                 }
-                                textToRender = textToRender.replace(memoryRegex, '').trim();
                             }
-                            assistantContentDiv.innerHTML = renderMarkdown(textToRender);
-                            addCodeCopyButtons(assistantContentDiv);
+                            
+                            renderCollapsibleCodeBlocks(assistantContentDiv);
                             assistantFooterDiv.querySelector('.timestamp').textContent = getTimestamp();
                             scrollChatToBottom('smooth');
+
                         } else if (eventType === 'stream_end') {
                             serverUploadedFileDetails = parsedData.uploaded_file_details || [];
                         } else if (eventType === 'stream_error') {
@@ -1588,30 +1918,43 @@
                     }
                 });
             }
+
+            // Final processing after stream ends
             const original_final_text = accumulatedText;
-            let text_for_display = original_final_text;
+            
             const memoryRegex = /\[memory\]([\s\S]*?)\[\/memory\]/gi;
             if (localStorage.getItem(MEMORY_ENABLED_KEY) === 'true') {
                 const memoryMatches = [...original_final_text.matchAll(memoryRegex)];
                 if (memoryMatches.length > 0) {
                     let longTermMemory = JSON.parse(localStorage.getItem(LONG_TERM_MEMORY_KEY) || '[]');
                     if (!Array.isArray(longTermMemory)) longTermMemory = [];
-                    memoryMatches.forEach(match => { const memoryContent = match[1].trim(); if (memoryContent && !longTermMemory.includes(memoryContent)) longTermMemory.push(memoryContent); });
+                    memoryMatches.forEach(match => { const memoryContent = match.trim(); if (memoryContent && !longTermMemory.includes(memoryContent)) longTermMemory.push(memoryContent); });
                     localStorage.setItem(LONG_TERM_MEMORY_KEY, JSON.stringify(longTermMemory));
                 }
-                text_for_display = original_final_text.replace(memoryRegex, '').trim();
             }
+
             if (assistantContentDiv) {
-                assistantContentDiv.innerHTML = renderMarkdown(text_for_display);
-                addCodeCopyButtons(assistantContentDiv);
-            } else if (text_for_display || memoryBadgeAdded) {
-                const result = createMessageElement('assistant', text_for_display, [], getTimestamp(), true);
-                if (memoryBadgeAdded) {
-                    const badge = document.createElement('div'); badge.className = 'memory-saved-badge';
-                    badge.innerHTML = `<button type="button"><svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M8.58835 14.8823L9.90621 14.6188C10.2934 14.5413 10.649 14.351 10.9282 14.0718L13.9991 11.0009C14.5518 10.4482 14.5516 9.55204 13.9986 8.99962C13.446 8.4475 12.5504 8.44782 11.9982 9.00033L8.92793 12.0719C8.64889 12.351 8.45869 12.7065 8.38129 13.0936L8.11767 14.4117C8.06169 14.6915 8.30846 14.9383 8.58835 14.8823Z"></path><path d="M3 4C3 2.89543 3.89543 2 5 2V14C3.89543 14 3 13.1046 3 12V4Z"></path><path d="M6.97543 14H6V2H12C12.5523 2 13 2.44772 13 3V7.38574C12.3299 7.38522 11.6597 7.64065 11.1486 8.15198L8.07841 11.2235C7.63195 11.6702 7.32763 12.239 7.20378 12.8582L6.97543 14Z"></path></svg>Saved Memory</button>`;
-                    result.messageElement.insertBefore(badge, result.contentElement);
+                const textToRender = original_final_text
+                    .replace(/\[flowchart\]\s*```mermaid([\s\S]*?)```\s*\[\/flowchart\]/gs, (match, mermaidCode) => {
+                        return `<div class="mermaid-diagram-wrapper"><div class="mermaid-diagram-container"><div class="mermaid">${mermaidCode.trim()}</div></div></div>`;
+                    });
+
+                assistantContentDiv.innerHTML = renderMarkdown(textToRender);
+                
+                renderCollapsibleCodeBlocks(assistantContentDiv);
+                handleAiCommands(original_final_text, assistantContentDiv);
+
+                try {
+                    mermaid.run({ nodes: assistantContentDiv.querySelectorAll('.mermaid') });
+                } catch(e) {
+                    console.error("Mermaid final render error:", e);
+                    assistantContentDiv.querySelectorAll('.mermaid').forEach(el => {
+                        const wrapper = el.closest('.mermaid-diagram-wrapper');
+                        if (wrapper) wrapper.innerHTML = `<div class="flowchart-placeholder" style="color: var(--bubble-error-text);">Error: Could not render diagram.</div>`;
+                    });
                 }
             }
+
             if (userMessageHistoryEntry.parts.length > 0 || filesToProcess.length > 0) {
                 if (serverUploadedFileDetails.length > 0) {
                     serverUploadedFileDetails.forEach(fd => { if (fd.uri && fd.mime_type) { userMessageHistoryEntry.parts.push({ file_data: { mime_type: fd.mime_type, file_uri: fd.uri } }); } });
@@ -1726,6 +2069,31 @@
 
     // --- Initial Setup ---
     function initializeApp() {
+        const style = getComputedStyle(document.documentElement);
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'base', // Use 'base' to allow full customization with variables
+            fontFamily: style.getPropertyValue('font-family').trim() || 'sans-serif',
+            flowchart: {
+                useMaxWidth: false // Correct for horizontal scrolling
+            },
+            themeVariables: {
+                background: style.getPropertyValue('--bg').trim(),
+                primaryColor: style.getPropertyValue('--input-bg').trim(),
+                primaryTextColor: style.getPropertyValue('--text').trim(),
+                primaryBorderColor: style.getPropertyValue('--accent').trim(),
+                lineColor: style.getPropertyValue('--input-border-focus').trim(),
+                secondaryColor: style.getPropertyValue('--bubble-user').trim(),
+                tertiaryColor: style.getPropertyValue('--input-bg').trim(),
+                nodeTextColor: style.getPropertyValue('--text').trim(),
+                edgeLabelBackground: style.getPropertyValue('--body-bg').trim(),
+                clusterBkg: 'rgba(255, 255, 255, 0.03)',
+                clusterBorder: 'var(--input-border)',
+                fontSize: '14px',
+                arrowheadColor: style.getPropertyValue('--input-border-focus').trim(),
+            }
+        });
+
         updateSendButtonState(); 
         adjustTextareaHeight(); 
         loadConversationsList();
