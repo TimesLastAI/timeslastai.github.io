@@ -7,7 +7,6 @@
   <title>TimesLast AI</title>
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dompurify@2.4.0/dist/purify.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   
   <!-- Highlight.js CDN -->
@@ -381,29 +380,6 @@
     .generic-file-block .file-details { overflow: hidden; }
     .generic-file-block .file-name { font-size: 14px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
     .generic-file-block .file-info { font-size: 12px; color: var(--bubble-file-info-text); white-space: nowrap; }
-    
-    /* ZIP Download Block Specifics */
-    .zip-download-block {
-        padding: 8px 8px 8px 12px; /* Less padding on the right for the button */
-    }
-    .zip-download-block .download-zip-btn {
-        background: none; border: none; cursor: pointer;
-        color: var(--text-muted);
-        width: 32px; height: 32px;
-        border-radius: 50%;
-        display: flex; align-items: center; justify-content: center;
-        transition: background-color 0.2s, color 0.2s;
-        margin-left: auto; /* Push to the right */
-        flex-shrink: 0;
-    }
-    .zip-download-block .download-zip-btn:hover {
-        background-color: rgba(255, 255, 255, 0.1);
-        color: var(--text);
-    }
-    .zip-download-block .download-zip-btn svg {
-        width: 20px; height: 20px;
-    }
-
 
     /* Assistant message */
     .message.assistant { align-self: flex-start; align-items: flex-start;}
@@ -412,7 +388,7 @@
         word-wrap: break-word; max-width: 100%; line-height: 1.5;
     }
     
-    /* --- Collapsible Code Block & File Op Notification --- */
+    /* --- Collapsible Code Block --- */
     .code-block-wrapper {
         position: relative;
         margin: 10px 0;
@@ -489,32 +465,18 @@
     .code-block-wrapper.collapsed .code-block-toggle-btn .icon-expand-less { display: none; }
     .code-block-wrapper.collapsed .code-block-toggle-btn .icon-expand-more { display: block; }
 
-    .file-op-caption {
-        font-size: 11px;
-        font-style: italic;
-        color: var(--text-muted);
-        padding-left: 10px;
-        margin-top: -8px;
-        margin-bottom: 12px;
-    }
-    .file-op-caption code {
-        font-style: normal;
-        color: var(--text);
-        background: var(--input-bg);
-        padding: 1px 4px;
-        border-radius: 3px;
-    }
-
-
-    /* --- Mermaid Diagram Styles --- */
+    /* --- Mermaid Diagram Styles (FIXED) --- */
     .mermaid-diagram-wrapper {
-        overflow: auto; /* Enable both horizontal and vertical scrolling */
-        max-height: 60vh; /* Limit vertical height */
+        display: inline-block; /* Makes the wrapper shrink-to-fit its content */
+        max-width: 100%; /* Ensures it doesn't overflow the message bubble */
+        overflow: auto; /* Enable scrollbars if content is larger than max-width/max-height */
+        max-height: 60vh; /* Limit vertical height for very tall diagrams */
         padding: 10px;
         margin: 10px 0;
         border: 1px solid var(--input-border);
         border-radius: 8px;
         background-color: rgba(0,0,0,0.2);
+        vertical-align: top;
     }
     .mermaid-diagram-wrapper::-webkit-scrollbar { height: 8px; width: 8px; }
     .mermaid-diagram-wrapper::-webkit-scrollbar-track { background: transparent; }
@@ -547,12 +509,17 @@
         text-align: center;
     }
     
-    /* --- Table styles --- */
+    /* --- Table styles (FIXED) --- */
     .message.assistant table {
-        display: block; overflow-x: auto; 
-        width: 100%; border-collapse: collapse; margin: 1em 0;
-        border: 1px solid var(--input-border); border-radius: 6px;
+        display: inline-block; /* Makes the table shrink-to-fit its content */
+        max-width: 100%; /* Prevents overflow and enables horizontal scrolling */
+        overflow-x: auto; 
+        border-collapse: collapse; 
+        margin: 1em 0;
+        border: 1px solid var(--input-border); 
+        border-radius: 6px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        vertical-align: top; /* Align with surrounding text properly */
     }
     .message.assistant th, .message.assistant td {
         padding: 10px 14px; border-bottom: 1px solid var(--input-border);
@@ -1055,8 +1022,6 @@
     let isSending = false; 
     let currentConversationId = null; 
     let currentHistory = [];
-    let virtualFiles = {}; // In-memory file system for the current session
-    window.zipBlobs = {}; // Global object to store zip blob URLs
 
     // --- Suggestion Prompts Data ---
     const allSuggestionPrompts = [
@@ -1213,6 +1178,95 @@
 
             hljs.highlightElement(codeEl);
         });
+    }
+
+    /**
+     * Translates a simple, word-based flowchart syntax into valid Mermaid code.
+     * @param {string} simpleText The simplified flowchart description from the AI.
+     * @returns {string} Valid Mermaid.js code.
+     */
+    function parseSimpleFlowchart(simpleText) {
+        if (typeof simpleText !== 'string' || !simpleText.trim()) {
+            return 'graph TD;\n  error["Invalid or empty flowchart definition"];';
+        }
+
+        const lines = simpleText.trim().split('\n').map(line => line.trim()).filter(line => line);
+        let mermaidCode = '';
+        const nodeMap = new Map();
+        let nodeIdCounter = 0;
+
+        // Function to create a unique ID for a node based on its text
+        const getNodeId = (text) => {
+            if (!nodeMap.has(text)) {
+                // Create a valid Mermaid ID (alphanumeric)
+                const newId = `N${nodeIdCounter++}`;
+                nodeMap.set(text, newId);
+            }
+            return nodeMap.get(text);
+        };
+
+        // First line must be the graph direction
+        const firstLine = lines.shift() || '';
+        const directionMatch = firstLine.match(/^graph\s+(top\s+to\s+bottom|bottom\s+to\s+top|left\s+to\s+right|right\s+to\s+left)/i);
+        if (directionMatch) {
+            const directions = {
+                'top to bottom': 'TD',
+                'bottom to top': 'BT',
+                'left to right': 'LR',
+                'right to left': 'RL'
+            };
+            mermaidCode += `graph ${directions[directionMatch[1].toLowerCase()]};\n`;
+        } else {
+            // Default direction if not specified
+            mermaidCode += 'graph TD;\n';
+            lines.unshift(firstLine); // Put the line back if it wasn't a direction
+        }
+
+        // Process all node definitions first
+        lines.forEach(line => {
+            const nodeMatch = line.match(/^(start|end|node|decision)\s+"([^"]+)"/i);
+            if (nodeMatch) {
+                const [, type, text] = nodeMatch;
+                const id = getNodeId(text);
+                const sanitizedText = text.replace(/"/g, '#quot;'); // Sanitize quotes for Mermaid
+
+                switch (type.toLowerCase()) {
+                    case 'start':
+                        mermaidCode += `    ${id}(["${sanitizedText}"])\n`;
+                        break;
+                    case 'end':
+                        mermaidCode += `    ${id}(["${sanitizedText}"])\n`;
+                        break;
+                    case 'node':
+                        mermaidCode += `    ${id}["${sanitizedText}"]\n`;
+                        break;
+                    case 'decision':
+                        mermaidCode += `    ${id}{"${sanitizedText}"}\n`;
+                        break;
+                }
+            }
+        });
+
+        // Process all link definitions
+        lines.forEach(line => {
+            const linkMatch = line.match(/^link\s+"([^"]+)"\s+to\s+"([^"]+)"(?:\s+with\s+"([^"]+)")?/i);
+            if (linkMatch) {
+                const [, fromText, toText, label] = linkMatch;
+                const fromId = getNodeId(fromText);
+                const toId = getNodeId(toText);
+
+                if (fromId && toId) {
+                    if (label) {
+                        const sanitizedLabel = label.replace(/"/g, '#quot;');
+                        mermaidCode += `    ${fromId} -- "${sanitizedLabel}" --> ${toId}\n`;
+                    } else {
+                        mermaidCode += `    ${fromId} --> ${toId}\n`;
+                    }
+                }
+            }
+        });
+
+        return mermaidCode;
     }
 
     // --- UI State Management ---
@@ -1490,7 +1544,7 @@
     function isSystemPrompt(text) {
         if (!text) return false;
         const lowerText = text.toLowerCase();
-        return lowerText.startsWith("system prompt (unrelated to your built in one, this is for the general timeslastai.github.io site you're on) (instructions for ai):") ||
+        return lowerText.startsWith("system prompt (instructions for ai):") ||
                lowerText.startsWith("understood. i will proceed with these instructions");
     }
 
@@ -1544,7 +1598,6 @@
             const storedData = JSON.parse(localStorage.getItem(conversationId));
             if (storedData && storedData.history && Array.isArray(storedData.history)) {
                 currentConversationId = conversationId; messagesContainer.innerHTML = ''; currentHistory = []; clearAllSelectedFiles();
-                virtualFiles = {}; // Clear virtual files when loading a conversation
                 
                 for (const savedItem of storedData.history) {
                     if (!savedItem || !savedItem.role || !savedItem.parts || !Array.isArray(savedItem.parts)) continue;
@@ -1569,21 +1622,21 @@
                         }
                         if (textForDisplay === "Error" || (savedItem.role === 'model' && textForDisplay?.toLowerCase().startsWith('error:'))) displayRole = 'error';
                         
-                        // On load, we need to re-process the text to recreate virtual files
-                        handleAiCommands(textForDisplay, null, true); // `true` for silent mode to rebuild virtualFiles
-                        
                         // For assistant messages, handle complex rendering
                         if (displayRole === 'assistant') {
                              const { messageElement, contentElement } = createMessageElement(displayRole, '', fileInfosForDisplay, savedItem.timestamp || getTimestamp(), false);
+                             
+                             const flowchartRegex = /\[flowchart\]\s*```([\s\S]*?)```\s*\[\/flowchart\]/gs;
+                             const memoryRegex = /\[memory\][\s\S]*?\[\/memory\]/gi;
                              const textToRender = textForDisplay
-                                .replace(/\[flowchart\]\s*```mermaid([\s\S]*?)```\s*\[\/flowchart\]/gs, (match, mermaidCode) => {
-                                    return `<div class="mermaid-diagram-wrapper"><div class="mermaid-diagram-container"><div class="mermaid">${mermaidCode.trim()}</div></div></div>`;
+                                .replace(flowchartRegex, (match, simpleFlowchartCode) => {
+                                    const mermaidCode = parseSimpleFlowchart(simpleFlowchartCode);
+                                    return `<div class="mermaid-diagram-wrapper"><div class="mermaid-diagram-container"><div class="mermaid">${mermaidCode}</div></div></div>`;
                                 })
-                                .replace(/\[\/?(create|edit|zip|flowchart|memory)\]/gs, ''); 
+                                .replace(memoryRegex, '');
 
                             contentElement.innerHTML = renderMarkdown(textToRender);
                             renderCollapsibleCodeBlocks(contentElement);
-                            handleAiCommands(textForDisplay, contentElement);
                             try { mermaid.run({ nodes: contentElement.querySelectorAll('.mermaid') }); } catch (e) { console.error("Mermaid rendering error on load:", e); }
                         } else {
                             // For user, error, notification messages, use simpler rendering
@@ -1601,8 +1654,6 @@
         if (mainEl.classList.contains('chat-active') && currentHistory.length > 1) saveCurrentConversation(); 
         
         currentConversationId = null; currentHistory = []; messagesContainer.innerHTML = ''; clearAllSelectedFiles();
-        virtualFiles = {}; // Clear virtual file system on new chat
-        window.zipBlobs = {}; // Clear stored zip blobs
         chatInput.value = ''; adjustTextareaHeight(); updateSendButtonState(); highlightCurrentConversation(null);
 
         mainEl.classList.add('splash-visible');
@@ -1612,26 +1663,37 @@
         
         const memoryEnabled = localStorage.getItem(MEMORY_ENABLED_KEY) === 'true';
         let systemPromptParts = [];
-        let finalSystemPrompt = "SYSTEM PROMPT (unrelated to your built in one, this is for the general timeslastai.github.io site you're on) (Instructions for AI):\n\n";
+        let finalSystemPrompt = "SYSTEM PROMPT (Instructions for AI):\n\n";
         
-        systemPromptParts.push(
-            "You have a virtual file system. Use the following commands wrapped in brackets to manage files. The user will not see these command tags in the final output.\n\n" +
-            "1.  **Create File**: To create a file, use `[create]filename.ext[/create]` on one line, and then provide the content in a standard markdown code block immediately after.\n\n" +
-            "2.  **Edit File**: To edit an existing file, use `[edit]filename.ext[/edit]` and provide the *full, new content* in a code block.\n\n" +
-            "3.  **Zip Files**: To zip files and send them to the user, use `[zip]file1.ext, file2.ext, ...[/zip]`. List all files to be included, separated by commas.\n\n" +
-            "4.  **Flowchart/Diagram**: To generate a flowchart or diagram, use `[flowchart]` and provide the diagram definition in a `mermaid` code block. The final output will be a rendered, sideways-oriented diagram with scrollbars if it's too wide. Use standard Mermaid syntax with a 'TD' (Top-Down) or 'LR' (Left-Right) graph orientation.\n" +
-            "    *Example*:\n" +
-            "    [flowchart]\n" +
-            "    ```mermaid\n" +
-            "    graph TD;\n" +
-            "        A[Start]-->B{Is it Raining?};\n" +
-            "        B--Yes-->C[Bring Umbrella];\n" +
-            "        B--No-->D[Enjoy the Day];\n" +
-            "        C-->E[End];\n" +
-            "        D-->E[End];\n" +
-            "    ```\n" +
-            "    [/flowchart]\n"
-        );
+        const instructions = [
+            "You have a special command for generating diagrams and flowcharts.",
+            "To generate a flowchart, use `[flowchart]` and then describe the chart using the simple syntax below. The user will only see the final rendered diagram.",
+            "**Flowchart Syntax Rules:**",
+            "- Start with `graph [direction]`. Directions can be `top to bottom`, `bottom to top`, `left to right`, or `right to left`.",
+            "- Define a standard box with `node \"Node Text\"`.",
+            "- Define a diamond-shaped box with `decision \"Decision Text\"`.",
+            "- Define the start or end points with `start \"Text\"` or `end \"Text\"`.",
+            "- Connect nodes with `link \"Text of Node 1\" to \"Text of Node 2\"`.",
+            "- To add a label to a connection, use `link \"Node 1\" to \"Node 2\" with \"Label Text\"`.",
+            "\n**Crucially, all node text inside quotes must be unique.**",
+            "\n*Example Usage:*\n" +
+            "[flowchart]\n" +
+            "```\n" +
+            "graph top to bottom\n" +
+            "start \"Start\"\n" +
+            "decision \"Is it Raining?\"\n" +
+            "node \"Bring Umbrella\"\n" +
+            "node \"Enjoy the Day\"\n" +
+            "end \"End\"\n" +
+            "link \"Start\" to \"Is it Raining?\"\n" +
+            "link \"Is it Raining?\" to \"Bring Umbrella\" with \"Yes\"\n" +
+            "link \"Is it Raining?\" to \"Enjoy the Day\" with \"No\"\n" +
+            "link \"Bring Umbrella\" to \"End\"\n" +
+            "link \"Enjoy the Day\" to \"End\"\n" +
+            "```\n" +
+            "[/flowchart]"
+        ];
+        systemPromptParts.push(instructions.join('\n'));
 
         const savedName = localStorage.getItem(USER_NAME_KEY);
         if (savedName) systemPromptParts.push(`The user's name is ${savedName}. Refer to them by this name when appropriate.`);
@@ -1663,117 +1725,6 @@
 
     function highlightCurrentConversation(conversationId) { 
         document.querySelectorAll('.conversation-item').forEach(item => { item.classList.toggle('active', item.dataset.id === conversationId); }); 
-    }
-
-    // --- AI Command Handling ---
-    function handleZipDownload(event) {
-        const button = event.currentTarget;
-        const zipId = button.dataset.zipId;
-        const blobUrl = window.zipBlobs[zipId];
-        if (blobUrl) {
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = button.dataset.filename || "archive.zip";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        } else {
-            console.error("Could not find zip blob for ID:", zipId);
-            alert("Sorry, there was an error retrieving the file for download.");
-        }
-    }
-
-    function createZipDownloadMessage(zipFilename, totalSize) {
-        const truncatedName = truncateFilename(zipFilename, 20);
-        const sizeInfo = formatBytes(totalSize);
-        const fileType = zipFilename.split('.').pop().toUpperCase();
-        const zipId = 'zip_' + Date.now();
-
-        const messageContent = `
-            <div class="file-block-container">
-                <div class="file-block generic-file-block zip-download-block">
-                    <div class="file-icon">
-                        <svg width="24" height="24" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 9C7 6.79086 8.79086 5 11 5L18.6383 5C19.1906 5 19.6383 5.44772 19.6383 6V6.92308C19.6383 9.13222 21.4292 10.9231 23.6383 10.9231H24C24.5523 10.9231 25 11.3708 25 11.9231V23C25 25.2091 23.2091 27 21 27H11C8.79086 27 7 25.2091 7 23V9Z" fill="#F8CA27"></path><g><path d="M19.6602 6.92458V5.84766L24.4126 10.9246H23.6602C21.451 10.9246 19.6602 9.13372 19.6602 6.92458Z" fill="#F8EDC7"></path></g></svg>
-                    </div>
-                    <div class="file-details">
-                        <div class="file-name" title="${simpleSanitize(zipFilename)}">${simpleSanitize(truncatedName)}</div>
-                        <div class="file-info">${fileType} ${sizeInfo}</div>
-                    </div>
-                    <button class="download-zip-btn" data-zip-id="${zipId}" data-filename="${simpleSanitize(zipFilename)}" title="Download ${simpleSanitize(zipFilename)}">
-                        <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0V0z" fill="none"/><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                    </button>
-                </div>
-            </div>`;
-        
-        const { messageElement } = createMessageElement('notification', messageContent);
-        const downloadBtn = messageElement.querySelector('.download-zip-btn');
-        return { zipId, downloadBtn };
-    }
-    
-    function handleAiCommands(text, containerElement = null, silent = false) {
-        // Flowchart is handled separately in sendMessage, so it's removed from here.
-        const commandRegex = /\[(create|edit|zip|memory)\]([\s\S]*?)\[\/\1\]/gs;
-        
-        const commands = Array.from(text.matchAll(commandRegex));
-
-        for (const match of commands) {
-            const [fullMatch, command, content] = match;
-            let textAfterCommand = text.substring(match.index + fullMatch.length);
-            
-            if (command === 'create' || command === 'edit') {
-                const filename = content.trim();
-                const codeBlockRegex = /^\s*```(?:\w+\n)?([\s\S]*?)```/;
-                const codeMatch = textAfterCommand.match(codeBlockRegex);
-
-                if (codeMatch) {
-                    const code = codeMatch[1];
-                    virtualFiles[filename] = code;
-
-                    if (!silent && containerElement) {
-                        const codeBlocksInTextBefore = (text.substring(0, match.index).match(/```/g) || []).length / 2;
-                        const targetBlockIndex = Math.floor(codeBlocksInTextBefore);
-                        
-                        const allCodeBlocks = containerElement.querySelectorAll('.code-block-wrapper');
-                        const targetBlock = allCodeBlocks[targetBlockIndex];
-                        
-                        if (targetBlock && !targetBlock.nextElementSibling?.classList.contains('file-op-caption')) {
-                            const caption = document.createElement('div');
-                            caption.className = 'file-op-caption';
-                            caption.innerHTML = `(${command === 'create' ? 'created' : 'updated'} file: <code>${simpleSanitize(filename)}</code>)`;
-                            targetBlock.parentNode.insertBefore(caption, targetBlock.nextSibling);
-                        }
-                    }
-                }
-            } else if (command === 'zip') {
-                if (!silent) {
-                    const filenames = content.split(',').map(f => f.trim()).filter(f => f);
-                    if (filenames.length > 0) {
-                        const zip = new JSZip();
-                        let filesAdded = 0;
-                        let totalSize = 0;
-                        filenames.forEach(fname => {
-                            if (virtualFiles.hasOwnProperty(fname)) {
-                                const fileContent = virtualFiles[fname];
-                                zip.file(fname, fileContent);
-                                totalSize += new Blob([fileContent]).size;
-                                filesAdded++;
-                            } else {
-                                createMessageElement('error', `Cannot zip file: <code>${simpleSanitize(fname)}</code> does not exist.`);
-                            }
-                        });
-                        if (filesAdded > 0) {
-                            const zipFilename = filenames.length > 1 ? 'archive.zip' : filenames.split('.') + '.zip';
-                            zip.generateAsync({ type: "blob" }).then(function(blobContent) {
-                                const { zipId, downloadBtn } = createZipDownloadMessage(zipFilename, totalSize);
-                                const blobUrl = URL.createObjectURL(blobContent);
-                                window.zipBlobs[zipId] = blobUrl;
-                                downloadBtn.addEventListener('click', handleZipDownload);
-                            });
-                        }
-                    }
-                }
-            }
-        }
     }
 
     async function sendMessage() {
@@ -1819,6 +1770,7 @@
         let streamError = null;
         let assistantMessageWrapperDiv, assistantContentDiv, assistantFooterDiv;
         let memoryBadgeAdded = false;
+        let flowchartCounter = 0; // Counter for unique flowchart IDs in this message
 
         try {
             const response = await fetch(BACKEND_URL, { method: 'POST', body: formData });
@@ -1861,18 +1813,40 @@
                             }
                             accumulatedText += parsedData.text_chunk;
                             
-                            // --- Streaming Logic ---
-                            let textToRender = accumulatedText.replace(/\[memory\][\s\S]*?\[\/memory\]/g, '');
-
-                            const flowchartRegex = /\[flowchart\]([\s\S]*?)(\[\/flowchart\]|$)/g;
-                            textToRender = textToRender.replace(flowchartRegex, (match, content, endTag) => {
-                                if (endTag !== '[/flowchart]') {
+                            // --- NEW STREAMING LOGIC ---
+                            const memoryRegex = /\[memory\][\s\S]*?\[\/memory\]/gi;
+                            const flowchartRegex = /\[flowchart\]\s*```([\s\S]*?)```\s*\[\/flowchart\]|\[flowchart\]\s*```([\s\S]*)/g;
+                            
+                            let textForStreaming = accumulatedText.replace(memoryRegex, '');
+                            
+                            let tempFlowchartCounter = 0;
+                            textForStreaming = textForStreaming.replace(flowchartRegex, (match, completeContent, incompleteContent) => {
+                                tempFlowchartCounter++;
+                                const uniqueId = `mermaid-stream-${flowchartCounter + tempFlowchartCounter}`;
+                                
+                                if (completeContent !== undefined) { // Block is complete
+                                    const mermaidCode = parseSimpleFlowchart(completeContent);
+                                    return `<div class="mermaid-diagram-wrapper"><div class="mermaid-diagram-container"><div class="mermaid" id="${uniqueId}">${mermaidCode}</div></div></div>`;
+                                } else { // Block is incomplete
                                     return `<div class="mermaid-diagram-wrapper"><div class="flowchart-placeholder">Crafting flowchart...</div></div>`;
                                 }
-                                return ''; 
                             });
 
-                            assistantContentDiv.innerHTML = renderMarkdown(textToRender);
+                            assistantContentDiv.innerHTML = renderMarkdown(textForStreaming);
+
+                            // Render any new, complete flowcharts that have just appeared
+                            assistantContentDiv.querySelectorAll('.mermaid').forEach(el => {
+                                if (el.dataset.rendered !== 'true') {
+                                    try {
+                                        el.dataset.rendered = 'true'; 
+                                        mermaid.run({ nodes: [el] });
+                                    } catch (e) {
+                                        console.error("Mermaid streaming render error:", e);
+                                        const wrapper = el.closest('.mermaid-diagram-wrapper');
+                                        if (wrapper) wrapper.innerHTML = `<div class="flowchart-placeholder" style="color: var(--bubble-error-text);">Error rendering diagram.</div>`;
+                                    }
+                                }
+                            });
 
                             if (localStorage.getItem(MEMORY_ENABLED_KEY) === 'true' && accumulatedText.includes('[memory]')) {
                                 if (!memoryBadgeAdded) {
@@ -1922,9 +1896,9 @@
             // Final processing after stream ends
             const original_final_text = accumulatedText;
             
-            const memoryRegex = /\[memory\]([\s\S]*?)\[\/memory\]/gi;
+            const memoryRegexForSaving = /\[memory\]([\s\S]*?)\[\/memory\]/gi;
             if (localStorage.getItem(MEMORY_ENABLED_KEY) === 'true') {
-                const memoryMatches = [...original_final_text.matchAll(memoryRegex)];
+                const memoryMatches = [...original_final_text.matchAll(memoryRegexForSaving)];
                 if (memoryMatches.length > 0) {
                     let longTermMemory = JSON.parse(localStorage.getItem(LONG_TERM_MEMORY_KEY) || '[]');
                     if (!Array.isArray(longTermMemory)) longTermMemory = [];
@@ -1933,27 +1907,8 @@
                 }
             }
 
-            if (assistantContentDiv) {
-                const textToRender = original_final_text
-                    .replace(/\[flowchart\]\s*```mermaid([\s\S]*?)```\s*\[\/flowchart\]/gs, (match, mermaidCode) => {
-                        return `<div class="mermaid-diagram-wrapper"><div class="mermaid-diagram-container"><div class="mermaid">${mermaidCode.trim()}</div></div></div>`;
-                    });
-
-                assistantContentDiv.innerHTML = renderMarkdown(textToRender);
-                
-                renderCollapsibleCodeBlocks(assistantContentDiv);
-                handleAiCommands(original_final_text, assistantContentDiv);
-
-                try {
-                    mermaid.run({ nodes: assistantContentDiv.querySelectorAll('.mermaid') });
-                } catch(e) {
-                    console.error("Mermaid final render error:", e);
-                    assistantContentDiv.querySelectorAll('.mermaid').forEach(el => {
-                        const wrapper = el.closest('.mermaid-diagram-wrapper');
-                        if (wrapper) wrapper.innerHTML = `<div class="flowchart-placeholder" style="color: var(--bubble-error-text);">Error: Could not render diagram.</div>`;
-                    });
-                }
-            }
+            // The streaming loop has already handled rendering. No need to re-render here.
+            // We just save the complete history and state.
 
             if (userMessageHistoryEntry.parts.length > 0 || filesToProcess.length > 0) {
                 if (serverUploadedFileDetails.length > 0) {
